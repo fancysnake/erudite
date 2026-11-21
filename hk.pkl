@@ -1,0 +1,62 @@
+amends "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+  // File hygiene
+  ["check-added-large-files"] = (Builtins.check_added_large_files) {
+    exclude = List("poetry.lock")
+  }
+  ["check-merge-conflict"] = Builtins.check_merge_conflict
+  ["detect-private-key"] = Builtins.detect_private_key
+  ["end-of-file-fixer"] = Builtins.newlines
+  ["trailing-whitespace"] = Builtins.trailing_whitespace
+
+  // Python
+  ["black"] = Builtins.black
+  ["ruff"] = Builtins.ruff
+  ["codespell"] {
+    glob = List("**/*")
+    exclude = List("**/*.lock")
+    check = "codespell --toml=pyproject.toml {{files}}"
+  }
+
+  // Django templates: lint and format check in one djlint run
+  ["djlint"] {
+    glob = List("src/**/*.html")
+    check = "djlint {{files}} --lint --check --profile=django"
+    fix = "djlint {{files}} --lint --reformat --profile=django"
+  }
+
+  // TOML
+  ["taplo"] {
+    glob = List("*.toml")
+    check = "taplo format --check --config=.taplo.toml {{files}}"
+    fix = "taplo format --config=.taplo.toml {{files}}"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+  // The type check reads the whole project, so it takes no file list; hk runs
+  // it once, and only when the push touches Python source.
+  ["pre-push"] {
+    steps {
+      ...linters
+      ["mypy"] {
+        glob = List("src/**/*.py")
+        check = "mise run lint:mypy"
+      }
+    }
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+  ["check"] {
+    steps = linters
+  }
+}

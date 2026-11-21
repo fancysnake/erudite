@@ -1,0 +1,6 @@
+exclude = [".venv/**/*.toml"]
+
+[formatting]
+column_width = 88
+inline_table_expand = false
+indent_string = "    "
