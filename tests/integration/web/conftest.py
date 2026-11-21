@@ -1,7 +1,6 @@
 from collections import UserString
 
 import pytest
-from django.contrib.auth import get_user_model
 
 
 class _StrictUndefined(UserString):
@@ -21,11 +20,4 @@ def browser_fixture(client, settings):
     templates = [{**t, "OPTIONS": {**t["OPTIONS"]}} for t in settings.TEMPLATES]
     templates[0]["OPTIONS"]["string_if_invalid"] = _StrictUndefined("%s")
     settings.TEMPLATES = templates
-    return client
-
-
-@pytest.fixture(name="admin")
-def admin_fixture(client):
-    user = get_user_model().objects.create_superuser("curator", password="pw")
-    client.force_login(user)
     return client

@@ -12,7 +12,6 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, ["localhost"]),
     DATABASE_URL=str,
     DEBUG=(bool, False),
-    ENV=(str, "development"),
     LANGUAGE_CODE=(str, "en"),
     SECRET_KEY=str,
     STATIC_ROOT=(str, "staticfiles"),
@@ -25,8 +24,9 @@ for _required in ("SECRET_KEY", "DATABASE_URL"):
         _missing = f"Set the {_required} environment variable"
         raise ImproperlyConfigured(_missing)
 
-ENV = env("ENV")
 DEBUG: bool = env("DEBUG")
+# The template coverage plugin needs it on under test.
+TEMPLATE_DEBUG: bool = env("TEMPLATE_DEBUG", default=DEBUG)
 SECRET_KEY = env("SECRET_KEY")
 ALLOWED_HOSTS: list[str] = env("ALLOWED_HOSTS")
 
@@ -65,8 +65,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],
-            # The template coverage plugin needs debug on under test.
-            "debug": DEBUG or ENV == "test",
+            "debug": TEMPLATE_DEBUG,
         },
     }
 ]

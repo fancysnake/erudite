@@ -1,7 +1,8 @@
 amends "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtins.pkl"
 
-local linters = new Mapping<String, Step> {
+// The only steps `mise run lint:hk` runs; `lint:py` covers the Python tools.
+local hygiene = new Mapping<String, Step> {
   // File hygiene
   ["check-added-large-files"] = (Builtins.check_added_large_files) {
     exclude = List("poetry.lock")
@@ -11,7 +12,17 @@ local linters = new Mapping<String, Step> {
   ["end-of-file-fixer"] = Builtins.newlines
   ["trailing-whitespace"] = Builtins.trailing_whitespace
 
-  // Python
+  // Django templates: lint and format check in one djlint run
+  ["djlint"] {
+    glob = List("src/**/*.html")
+    check = "djlint {{files}} --lint --check --profile=django"
+    fix = "djlint {{files}} --lint --reformat --profile=django"
+  }
+}
+
+// `mise run lint:py` checks these on every gate. The commit and fix hooks add
+// them so staged files still get formatted.
+local formatters = new Mapping<String, Step> {
   ["black"] = Builtins.black
   ["ruff"] = Builtins.ruff
   ["codespell"] {
@@ -19,15 +30,6 @@ local linters = new Mapping<String, Step> {
     exclude = List("**/*.lock")
     check = "codespell --toml=pyproject.toml {{files}}"
   }
-
-  // Django templates: lint and format check in one djlint run
-  ["djlint"] {
-    glob = List("src/**/*.html")
-    check = "djlint {{files}} --lint --check --profile=django"
-    fix = "djlint {{files}} --lint --reformat --profile=django"
-  }
-
-  // TOML
   ["taplo"] {
     glob = List("*.toml")
     check = "taplo format --check --config=.taplo.toml {{files}}"
@@ -39,13 +41,17 @@ hooks {
   ["pre-commit"] {
     fix = true
     stash = "git"
-    steps = linters
+    steps {
+      ...hygiene
+      ...formatters
+    }
   }
   // The type check reads the whole project, so it takes no file list; hk runs
   // it once, and only when the push touches Python source.
   ["pre-push"] {
     steps {
-      ...linters
+      ...hygiene
+      ...formatters
       ["mypy"] {
         glob = List("src/**/*.py")
         check = "mise run lint:mypy"
@@ -54,9 +60,12 @@ hooks {
   }
   ["fix"] {
     fix = true
-    steps = linters
+    steps {
+      ...hygiene
+      ...formatters
+    }
   }
   ["check"] {
-    steps = linters
+    steps = hygiene
   }
 }

@@ -21,7 +21,7 @@ run = [
 ]
 
 ["lint:hk"]
-description = "Run every hk linter on all files (file hygiene, templates, and the Python formatters)"
+description = "Run the hk linters that lint:py does not cover, on all files (file hygiene, templates)"
 run = "hk check --all"
 
 [check]
@@ -30,13 +30,7 @@ run = [{ task = "format:py" }, { task = "lint:py" }, { task = "lint:hk" }]
 
 [pr-fix]
 description = "The absolute gate the rituals repair until green: format, lint, every test with coverage, diff coverage"
-run = [
-    "poetry install",
-    { task = "format:py" },
-    { task = "lint:py" },
-    { task = "lint:hk" },
-    { task = "test:py:cov:diff" },
-]
+run = ["poetry install", { task = "check" }, { task = "test:py:cov:diff" }]
 
 [fullcheck]
 description = "The commit gate for people: pr-fix plus the debt budget, which needs judgement when it fails"
