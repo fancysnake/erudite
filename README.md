@@ -16,7 +16,8 @@ mise run bootstrap
 mise run start
 ```
 
-Open <http://localhost:8020>.
+Open <http://localhost:8020>. The admin is at `/admin/`; create a login with
+`mise run dj createsuperuser`.
 
 ## Work on it
 
