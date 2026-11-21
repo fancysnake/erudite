@@ -1,0 +1,20 @@
+{% load i18n static %}
+<!DOCTYPE html>
+{% get_current_language as language %}
+<html lang="{{ language }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}erudite{% endblock title %}</title>
+    <link rel="stylesheet" href="{% static 'erudite/base.css' %}">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="site-header__name" href="{% url 'home' %}">erudite</a>
+    </header>
+    <main class="site-main">
+      {% block content %}
+      {% endblock content %}
+    </main>
+  </body>
+</html>

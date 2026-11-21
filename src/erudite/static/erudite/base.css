@@ -1,0 +1,22 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+}
+
+.site-header,
+.site-main {
+  margin-inline: auto;
+  max-width: 60rem;
+  padding: 1rem;
+}
+
+.site-header__name {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}

@@ -1,0 +1,28 @@
+[settings]
+experimental = true
+# Tasks listed in `depends` run in parallel; `run = [...]` is sequential.
+jobs = 8
+
+[hooks]
+enter = "poetry install"
+
+[tools]
+hk = { version = "2.11.1", workflow = "release.yml" }
+pipx = "1.18.13"
+"pipx:poetry" = "2.5.1"
+pkl = "0.33.0"
+python = "3.14.10"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+_.file = "env/development.env"
+PYTHONPATH = "src"
+# Consumed by python_tasks.toml (vendored from shared-configs).
+PACKAGE = "erudite"
+SRC_PATHS = "src"
+TEST_PATHS = "tests"
+SCRIPT_PATHS = ""
+TOML_PATHS = "*.toml .taplo.toml"
+
+[task_config]
+includes = ["tasks.toml", "python_tasks.toml"]
