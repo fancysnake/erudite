@@ -86,6 +86,27 @@ def test_the_exclusive_shelf_gives_the_status(goodreads_export, *, shelf, status
     assert book["status"] == status
 
 
+@pytest.mark.parametrize(
+    ("exported", "rating"), (("5", 5), ("5.0", 5), ("0", None), ("0.0", None))
+)
+def test_a_rating_is_a_whole_number_or_nothing(goodreads_export, *, exported, rating):
+    assert _read_one(goodreads_export, **{"My Rating": exported})["rating"] == rating
+
+
+def test_names_and_titles_lose_their_extra_spaces(goodreads_export):
+    book = _read_one(
+        goodreads_export,
+        Title="Night's  Master  (Flat Earth #1)",
+        Author="Tanith  Lee",
+        **{"Additional Authors": "Klaus  Brenner"},
+    )
+
+    assert (book["title"], book["authors"]) == (
+        "Night's Master",
+        ["Tanith Lee", "Klaus Brenner"],
+    )
+
+
 def test_additional_authors_follow_the_author(goodreads_export):
     book = _read_one(
         goodreads_export,
@@ -127,7 +148,12 @@ def test_an_export_with_no_books_and_the_wrong_columns_is_rejected(
 
 @pytest.mark.parametrize(
     "changes",
-    ({"Book Id": "mort"}, {"Date Added": "24.12.2019"}, {"My Rating": "five"}),
+    (
+        {"Book Id": "mort"},
+        {"Date Added": "24.12.2019"},
+        {"My Rating": "five"},
+        {"My Rating": "4.5"},
+    ),
 )
 def test_a_value_that_does_not_parse_names_its_row(goodreads_export, changes):
     path = goodreads_export(DUNE, MORT | changes)

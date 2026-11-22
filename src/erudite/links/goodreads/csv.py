@@ -39,8 +39,22 @@ _STATUS_BY_SHELF = {
 }
 
 
+def _squeeze(value: str) -> str:
+    """Goodreads pads names with runs of spaces: `Klaus  Brenner`."""
+    return " ".join(value.split())
+
+
 def _split(value: str) -> list[str]:
-    return [part.strip() for part in value.split(",") if part.strip()]
+    return [name for part in value.split(",") if (name := _squeeze(part))]
+
+
+def _rating(value: str) -> int | None:
+    """Read `5` and `5.0` alike; `0` means the book has no rating."""
+    rating = float(value)
+    if not rating.is_integer():
+        msg = f"invalid rating: {value!r}"
+        raise ValueError(msg)
+    return int(rating) or None
 
 
 def _isbn(value: str) -> str:
@@ -53,7 +67,7 @@ def _date(value: str) -> dt.date | None:
 
 
 def _book(row: dict[str, str]) -> GoodreadsBookData:
-    title = row["Title"].strip()
+    title = _squeeze(row["Title"])
     series = _SERIES.match(title)
     return GoodreadsBookData(
         goodreads_id=int(row["Book Id"]),
@@ -64,7 +78,7 @@ def _book(row: dict[str, str]) -> GoodreadsBookData:
         series=series["series"] if series else "",
         series_position=series["position"] if series else "",
         shelves=_split(row["Bookshelves"]),
-        rating=int(row["My Rating"]) or None,
+        rating=_rating(row["My Rating"]),
         date_added=_date(row["Date Added"]),
         date_read=_date(row["Date Read"]),
         # A shelf the app has no status for is still on the to-read side.
