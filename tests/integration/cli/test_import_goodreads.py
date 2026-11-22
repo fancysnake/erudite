@@ -6,7 +6,7 @@ from django.core.management.base import CommandError
 
 from erudite.links.db.django.models import Book
 from erudite.pacts import ReadingStatus
-from tests.integration.conftest import DUNE, MORT
+from tests.goodreads import DUNE, MORT
 
 pytestmark = pytest.mark.django_db
 

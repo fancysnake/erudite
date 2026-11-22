@@ -2,8 +2,6 @@
 
 from django.db import migrations, models
 
-import erudite.pacts
-
 
 class Migration(migrations.Migration):
 
@@ -76,7 +74,7 @@ class Migration(migrations.Migration):
                             ("reading", "Reading"),
                             ("read", "Read"),
                         ],
-                        default=erudite.pacts.ReadingStatus["TO_READ"],
+                        default="to_read",
                         max_length=20,
                         verbose_name="reading status",
                     ),

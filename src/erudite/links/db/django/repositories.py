@@ -13,7 +13,10 @@ class BookRepository(BookRepositoryProtocol):
 
     @override
     def goodreads_ids(self) -> set[int]:
-        ids = Book.objects.values_list("goodreads_id", flat=True)
+        ids = Book.objects.filter(goodreads_id__isnull=False).values_list(
+            "goodreads_id", flat=True
+        )
+        # The filter leaves no NULL; the check only narrows the nullable column type.
         return {key for key in ids if key is not None}
 
     @override

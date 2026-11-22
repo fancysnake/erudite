@@ -4,7 +4,7 @@ import pytest
 
 from erudite.links.goodreads.csv import GoodreadsCsvExport
 from erudite.pacts import GoodreadsExportError, ReadingStatus
-from tests.integration.conftest import DUNE, GOODREADS_COLUMNS, MORT, MORT_BOOK
+from tests.goodreads import DUNE, GOODREADS_COLUMNS, MORT, MORT_BOOK
 
 
 def _read_one(goodreads_export, **changes):
@@ -115,6 +115,16 @@ def test_a_missing_column_is_named(goodreads_export):
         GoodreadsCsvExport().read(path)
 
 
+@pytest.mark.parametrize("columns", ((), ("Title", "Author")))
+def test_an_export_with_no_books_and_the_wrong_columns_is_rejected(
+    goodreads_export, columns
+):
+    path = goodreads_export(columns=columns)
+
+    with pytest.raises(GoodreadsExportError, match=r"\.csv: no 'Book Id' column\.$"):
+        GoodreadsCsvExport().read(path)
+
+
 @pytest.mark.parametrize(
     "changes",
     ({"Book Id": "mort"}, {"Date Added": "24.12.2019"}, {"My Rating": "five"}),
@@ -130,7 +140,9 @@ def test_a_row_of_another_width_names_its_row(goodreads_export):
     path = goodreads_export(MORT)
     path.write_text(path.read_text() + "386373,Sourcery\n")
 
-    with pytest.raises(GoodreadsExportError, match=r"\.csv, row 3: zip"):
+    with pytest.raises(
+        GoodreadsExportError, match=r"\.csv, row 3: expected \d+ fields, found 2\.$"
+    ):
         GoodreadsCsvExport().read(path)
 
 

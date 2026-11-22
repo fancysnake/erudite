@@ -20,6 +20,19 @@ _SERIES = re.compile(
     r"^(?P<title>.+?)\s*"
     r"\((?P<series>[^();]+?),?\s+#(?P<position>[\d.]+(?:-[\d.]+)?)(?:;[^()]*)?\)$"
 )
+_COLUMNS = (
+    "Book Id",
+    "Title",
+    "Author",
+    "Additional Authors",
+    "ISBN",
+    "ISBN13",
+    "My Rating",
+    "Bookshelves",
+    "Date Added",
+    "Date Read",
+    "Exclusive Shelf",
+)
 _STATUS_BY_SHELF = {
     "read": ReadingStatus.READ,
     "currently-reading": ReadingStatus.READING,
@@ -69,21 +82,29 @@ class GoodreadsCsvExport(GoodreadsExportProtocol):
     @override
     def read(self, path: Path) -> list[GoodreadsBookData]:
         try:
-            header, *rows = _rows(path) or [[]]
+            table = _rows(path)
         except OSError as exc:
             msg = f"{path}: {exc.strerror}."
             raise GoodreadsExportError(msg) from exc
         except (UnicodeDecodeError, csv.Error) as exc:
             msg = f"{path}: {exc}"
             raise GoodreadsExportError(msg) from exc
+        header, rows = (table[0] if table else []), table[1:]
+        for column in _COLUMNS:
+            if column not in header:
+                msg = f"{path}: no {column!r} column."
+                raise GoodreadsExportError(msg)
         books: list[GoodreadsBookData] = []
         # Rows, not lines: a review may span several lines. The header is row 1.
         for number, row in enumerate(rows, start=2):
+            if len(row) != len(header):
+                msg = (
+                    f"{path}, row {number}: expected {len(header)} fields, "
+                    f"found {len(row)}."
+                )
+                raise GoodreadsExportError(msg)
             try:
                 books.append(_book(dict(zip(header, row, strict=True))))
-            except KeyError as exc:
-                msg = f"{path}: no {exc} column."
-                raise GoodreadsExportError(msg) from exc
             except ValueError as exc:
                 msg = f"{path}, row {number}: {exc}"
                 raise GoodreadsExportError(msg) from exc

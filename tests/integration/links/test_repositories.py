@@ -3,7 +3,7 @@ from django.db import IntegrityError
 
 from erudite.links.db.django.models import Book
 from erudite.links.db.django.repositories import BookRepository
-from tests.integration.conftest import MORT_BOOK
+from tests.goodreads import MORT_BOOK
 
 pytestmark = pytest.mark.django_db
 
