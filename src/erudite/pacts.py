@@ -37,8 +37,26 @@ class GoodreadsBookData(TypedDict):
     status: ReadingStatus
 
 
+class FileScanError(Exception):
+    """The directory cannot be scanned for book files."""
+
+
+class BookFileMetadata(TypedDict):
+    """What a book file says about itself; empty where it says nothing."""
+
+    title: str
+    authors: list[str]
+    isbn: str
+
+
+class BookFileData(BookFileMetadata):
+    path: Path
+    content_hash: str
+    ignored: bool
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
-class ImportSummaryDTO:
+class SyncSummaryDTO:
     created: int
     skipped: int
 
@@ -58,11 +76,54 @@ class BookRepositoryProtocol(Protocol):
         """Add all of `books`, or none of them."""
 
 
+class DiskBookFilesProtocol(Protocol):
+    def find(self, directory: Path) -> dict[str, Path]:
+        """Map content hash to path for every file under `directory`.
+
+        Of files with equal content, the first path in sort order stays.
+        `FileScanError` if the directory or a file cannot be read.
+        """
+
+    def read(self, path: Path) -> BookFileMetadata:
+        """Read the metadata embedded in an EPUB or PDF; never its pages.
+
+        A damaged file, or one of another format, gives empty metadata.
+        `FileScanError` if the file cannot be opened or read.
+        """
+
+    def exists(self, path: Path) -> bool: ...
+
+
+class BookFileRepositoryProtocol(Protocol):
+    def paths(self) -> dict[str, Path]:
+        """Map content hash to path for every stored file."""
+
+    def create(self, files: list[BookFileData]) -> None:
+        """Add all of `files`, or none of them."""
+
+    def move(self, content_hash: str, path: Path) -> None:
+        """Point the stored file with this content at `path`."""
+
+    def ignored_extensions(self) -> set[str]:
+        """Return the extensions the user ignores: lowercase, without the dot."""
+
+
 class LibraryServiceProtocol(Protocol):
     def book_count(self) -> int: ...
 
-    def import_goodreads(self, path: Path) -> ImportSummaryDTO:
+    def import_goodreads(self, path: Path) -> SyncSummaryDTO:
         """Add the books of the export at `path` that the library does not hold."""
+
+
+class BookFilesServiceProtocol(Protocol):
+    def scan(self, directory: Path) -> SyncSummaryDTO:
+        """Add the files under `directory` that are not stored.
+
+        A new file with an ignored extension is stored as ignored; a stored file
+        keeps what the user chose for it. A stored file found at a new path,
+        while its old path is gone, gets the new path. `skipped` counts every
+        file that was already stored, moved ones included.
+        """
 
 
 class ServicesProtocol(Protocol):
@@ -70,6 +131,9 @@ class ServicesProtocol(Protocol):
 
     @property
     def library(self) -> LibraryServiceProtocol: ...
+
+    @property
+    def book_files(self) -> BookFilesServiceProtocol: ...
 
 
 class RootRequestProtocol(Protocol):

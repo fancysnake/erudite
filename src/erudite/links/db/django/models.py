@@ -1,7 +1,8 @@
 """ORM models, internal to the adapter."""
 
-from typing import ClassVar
+from typing import ClassVar, override
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -60,6 +61,48 @@ class Book(models.Model):
 
     def __str__(self) -> str:
         return str(self.title)
+
+
+class BookFile(models.Model):
+    path = models.CharField(_("path"), max_length=4096)
+    # SHA-256 of the content, in hex: the same file under a new name is known.
+    content_hash = models.CharField(_("content hash"), max_length=64, unique=True)
+    title = models.CharField(_("title"), max_length=510)
+    authors = models.JSONField(_("authors"), default=list, blank=True)
+    isbn = models.CharField(_("ISBN"), max_length=13, blank=True)
+    ignored = models.BooleanField(_("ignored"), default=False)
+
+    class Meta:
+        ordering: ClassVar = ["title"]
+        verbose_name = _("book file")
+        verbose_name_plural = _("book files")
+
+    def __str__(self) -> str:
+        return str(self.title)
+
+
+class IgnoredExtension(models.Model):
+    extension = models.CharField(
+        _("extension"),
+        max_length=20,
+        unique=True,
+        help_text=_("Without the dot, for example: png."),
+    )
+
+    class Meta:
+        ordering: ClassVar = ["extension"]
+        verbose_name = _("ignored file extension")
+        verbose_name_plural = _("ignored file extensions")
+
+    def __str__(self) -> str:
+        return str(self.extension)
+
+    @override
+    def clean(self) -> None:
+        # The user may type ` .PNG` for `png`; the scan compares the clean form.
+        self.extension = str(self.extension).strip().lstrip(".").strip().lower()
+        if not self.extension:
+            raise ValidationError({"extension": _("Enter an extension.")})
 
 
 class BookAuthor(models.Model):

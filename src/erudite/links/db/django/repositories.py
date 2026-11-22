@@ -1,11 +1,23 @@
 """Repositories: the adapter's public surface, speaking DTOs and write dicts."""
 
+from pathlib import Path
 from typing import override
 
 from django.db import transaction
 
-from erudite.links.db.django.models import Author, Book, BookAuthor
-from erudite.pacts import BookRepositoryProtocol, GoodreadsBookData
+from erudite.links.db.django.models import (
+    Author,
+    Book,
+    BookAuthor,
+    BookFile,
+    IgnoredExtension,
+)
+from erudite.pacts import (
+    BookFileData,
+    BookFileRepositoryProtocol,
+    BookRepositoryProtocol,
+    GoodreadsBookData,
+)
 
 
 class BookRepository(BookRepositoryProtocol):
@@ -37,3 +49,25 @@ class BookRepository(BookRepositoryProtocol):
                 for book, group in zip(created, names, strict=True)
                 for position, name in enumerate(group)
             )
+
+
+class BookFileRepository(BookFileRepositoryProtocol):
+    @override
+    def paths(self) -> dict[str, Path]:
+        rows = BookFile.objects.values_list("content_hash", "path")
+        return {content_hash: Path(path) for content_hash, path in rows}
+
+    @override
+    def create(self, files: list[BookFileData]) -> None:
+        with transaction.atomic():
+            BookFile.objects.bulk_create(
+                BookFile(**file | {"path": str(file["path"])}) for file in files
+            )
+
+    @override
+    def move(self, content_hash: str, path: Path) -> None:
+        BookFile.objects.filter(content_hash=content_hash).update(path=str(path))
+
+    @override
+    def ignored_extensions(self) -> set[str]:
+        return set(IgnoredExtension.objects.values_list("extension", flat=True))

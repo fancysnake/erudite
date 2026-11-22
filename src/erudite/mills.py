@@ -2,12 +2,22 @@
 
 from typing import TYPE_CHECKING, override
 
-from erudite.pacts import ImportSummaryDTO, LibraryServiceProtocol
+from erudite.pacts import (
+    BookFileData,
+    BookFilesServiceProtocol,
+    LibraryServiceProtocol,
+    SyncSummaryDTO,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from erudite.pacts import BookRepositoryProtocol, GoodreadsExportProtocol
+    from erudite.pacts import (
+        BookFileRepositoryProtocol,
+        BookRepositoryProtocol,
+        DiskBookFilesProtocol,
+        GoodreadsExportProtocol,
+    )
 
 
 class LibraryService(LibraryServiceProtocol):
@@ -22,11 +32,46 @@ class LibraryService(LibraryServiceProtocol):
         return self._books.count()
 
     @override
-    def import_goodreads(self, path: Path) -> ImportSummaryDTO:
+    def import_goodreads(self, path: Path) -> SyncSummaryDTO:
         # A book already in the library is left alone: its status and every
         # edit made in the app belong to the user.
         exported = {book["goodreads_id"]: book for book in self._goodreads.read(path)}
         known = self._books.goodreads_ids()
         new = [book for key, book in exported.items() if key not in known]
         self._books.create_from_goodreads(new)
-        return ImportSummaryDTO(created=len(new), skipped=len(exported) - len(new))
+        return SyncSummaryDTO(created=len(new), skipped=len(exported) - len(new))
+
+
+class BookFilesService(BookFilesServiceProtocol):
+    def __init__(
+        self, *, files: BookFileRepositoryProtocol, disk: DiskBookFilesProtocol
+    ) -> None:
+        self._files = files
+        self._disk = disk
+
+    @override
+    def scan(self, directory: Path) -> SyncSummaryDTO:
+        found = self._disk.find(directory)
+        known = self._files.paths()
+        ignored = self._files.ignored_extensions()
+        new: list[BookFileData] = []
+        for content_hash, path in found.items():
+            if content_hash not in known:
+                metadata = self._disk.read(path)
+                new.append(
+                    BookFileData(
+                        path=path,
+                        content_hash=content_hash,
+                        title=metadata["title"] or path.stem,
+                        authors=metadata["authors"],
+                        isbn=metadata["isbn"],
+                        ignored=path.suffix.lower().removeprefix(".") in ignored,
+                    )
+                )
+            # A copy at a second path leaves the stored path alone.
+            elif known[content_hash] != path and not self._disk.exists(
+                known[content_hash]
+            ):
+                self._files.move(content_hash, path)
+        self._files.create(new)
+        return SyncSummaryDTO(created=len(new), skipped=len(found) - len(new))

@@ -3,9 +3,10 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from erudite.links.db.django.repositories import BookRepository
+from erudite.links.book_files.disk import DiskBookFiles
+from erudite.links.db.django.repositories import BookFileRepository, BookRepository
 from erudite.links.goodreads.csv import GoodreadsCsvExport
-from erudite.mills import LibraryService
+from erudite.mills import BookFilesService, LibraryService
 from erudite.pacts import RootRequestProtocol, ServicesProtocol
 
 if TYPE_CHECKING:
@@ -18,6 +19,10 @@ class Services(ServicesProtocol):
     @cached_property
     def library(self) -> LibraryService:
         return LibraryService(books=BookRepository(), goodreads=GoodreadsCsvExport())
+
+    @cached_property
+    def book_files(self) -> BookFilesService:
+        return BookFilesService(files=BookFileRepository(), disk=DiskBookFiles())
 
 
 class ServiceInjectionMiddleware[Response]:
