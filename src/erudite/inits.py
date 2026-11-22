@@ -1,7 +1,11 @@
 """Composition root: builds the services and hands them to the request."""
 
+from functools import cached_property
 from typing import TYPE_CHECKING
 
+from erudite.links.db.django.repositories import BookRepository
+from erudite.links.goodreads.csv import GoodreadsCsvExport
+from erudite.mills import LibraryService
 from erudite.pacts import RootRequestProtocol, ServicesProtocol
 
 if TYPE_CHECKING:
@@ -10,6 +14,10 @@ if TYPE_CHECKING:
 
 class Services(ServicesProtocol):
     """Built per request; one `cached_property` per service."""
+
+    @cached_property
+    def library(self) -> LibraryService:
+        return LibraryService(books=BookRepository(), goodreads=GoodreadsCsvExport())
 
 
 class ServiceInjectionMiddleware[Response]:

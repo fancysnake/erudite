@@ -19,6 +19,17 @@ mise run start
 Open <http://localhost:8020>. The admin is at `/admin/`; create a login with
 `mise run dj createsuperuser`.
 
+## Import your Goodreads library
+
+Export it at <https://www.goodreads.com/review/import>, then:
+
+```sh
+mise run dj import_goodreads ~/Downloads/goodreads_library_export.csv
+```
+
+The import adds the books the library does not hold yet. It never changes a
+book that is already there, so you can run it again after each new export.
+
 ## Work on it
 
 ```sh
