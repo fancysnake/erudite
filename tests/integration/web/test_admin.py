@@ -1,3 +1,4 @@
+import re
 from http import HTTPStatus
 
 import pytest
@@ -6,6 +7,8 @@ from erudite.links.db.django.models import Author, Book
 from erudite.pacts import ReadingStatus
 
 pytestmark = pytest.mark.django_db
+
+LINK = "text-primary-600 dark:text-primary-500 underline"
 
 
 def _book(title, *names, **fields):
@@ -35,11 +38,34 @@ def test_admin_lists_books_and_finds_them_by_author(admin_client, *, query, titl
 
 
 def test_admin_lists_the_authors_of_a_book_first_author_first(admin_client):
-    _book("Good Omens", "Terry Pratchett", "Neil Gaiman")
+    book = _book("Good Omens", "Terry Pratchett", "Neil Gaiman")
+    pratchett, gaiman = (credit.author.pk for credit in book.credits.all())
 
     response = admin_client.get("/admin/erudite_db/book/")
 
-    assert "Terry Pratchett, Neil Gaiman" in response.text
+    assert (
+        f'<a href="/admin/erudite_db/author/{pratchett}/change/" class="{LINK}">'
+        "Terry Pratchett</a>, "
+        f'<a href="/admin/erudite_db/author/{gaiman}/change/" class="{LINK}">'
+        "Neil Gaiman</a>"
+    ) in response.text
+
+
+def test_admin_links_an_author_to_their_books(admin_client):
+    mort = _book("Mort", "Terry Pratchett")
+    omens = _book("Good Omens", "Terry Pratchett", "Neil Gaiman")
+    _book("Dune", "Frank Herbert")
+    author = mort.credits.get().author
+
+    response = admin_client.get(f"/admin/erudite_db/author/{author.pk}/change/")
+
+    assert response.status_code == HTTPStatus.OK
+    assert (
+        f'<a href="/admin/erudite_db/book/{omens.pk}/change/" class="{LINK}">'
+        "Good Omens</a>\n"
+        f'<a href="/admin/erudite_db/book/{mort.pk}/change/" class="{LINK}">Mort</a>'
+    ) in response.text
+    assert "Dune" not in response.text
 
 
 def test_admin_finds_an_author_by_name(admin_client):
@@ -54,6 +80,29 @@ def test_admin_finds_an_author_by_name(admin_client):
     ]
 
 
+@pytest.mark.parametrize(
+    ("order", "names"),
+    (
+        ("-2", ["Terry Pratchett", "Frank Herbert"]),
+        ("2", ["Frank Herbert", "Terry Pratchett"]),
+    ),
+)
+def test_admin_counts_the_books_of_each_author_and_sorts_by_it(
+    admin_client, *, order, names
+):
+    _book("Mort", "Terry Pratchett")
+    _book("Sourcery", "Terry Pratchett")
+    _book("Dune", "Frank Herbert")
+
+    response = admin_client.get("/admin/erudite_db/author/", {"o": order})
+
+    assert response.status_code == HTTPStatus.OK
+    assert [str(author) for author in response.context["cl"].result_list] == names
+    assert re.findall(r"<td[^>]*field-_book_count[^>]*>\s*(\d+)", response.text) == [
+        str(Author.objects.get(name=name).books.count()) for name in names
+    ]
+
+
 def test_admin_changes_the_reading_status_and_adds_an_author(admin_client):
     book = _book("Good Omens", "Terry Pratchett")
     credit = book.credits.get()
@@ -63,7 +112,6 @@ def test_admin_changes_the_reading_status_and_adds_an_author(admin_client):
         f"/admin/erudite_db/book/{book.pk}/change/",
         {
             "title": "Good Omens",
-            "shelves": "[]",
             "status": ReadingStatus.READING,
             "credits-TOTAL_FORMS": "2",
             "credits-INITIAL_FORMS": "1",

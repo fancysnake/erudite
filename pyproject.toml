@@ -386,10 +386,12 @@ ignore_names = [
     # Django admin options, read by the admin site
     "autocomplete_fields",
     "extra",
+    "fields",
     "inlines",
     "list_display",
     "list_filter",
     "model",
+    "readonly_fields",
     "search_fields",
     # Book columns and write-dict keys, passed as a whole and not named in code
     "authors",
@@ -400,7 +402,6 @@ ignore_names = [
     "isbn13",
     "rating",
     "series_position",
-    "shelves",
 ]
 ignore_decorators = ["@admin.register", "@override"]
 sort_by_size = true
