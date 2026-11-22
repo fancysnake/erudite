@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from django.db import IntegrityError
 
-from erudite.links.db.django.models import Author, Book, BookFile
+from erudite.links.db.django.models import Author, Book, BookFile, IgnoredExtension
 from erudite.links.db.django.repositories import BookFileRepository, BookRepository
 from tests.goodreads import MORT_BOOK
 
@@ -117,3 +117,29 @@ def test_move_changes_the_path_of_the_file_with_that_content():
         "aa": Path("/sorted/mort.epub"),
         "bb": Path("/books/dune.pdf"),
     }
+
+
+def test_files_with_an_ignored_extension_are_marked_and_the_others_are_not():
+    files = BookFileRepository()
+    cover = MORT_FILE | {"path": Path("/books/Cover.PNG"), "content_hash": "cc"}
+    files.create([MORT_FILE, DUNE_FILE, cover])
+    for extension in ("png", " .PDF", "."):
+        IgnoredExtension.objects.create(extension=extension)
+
+    files.ignore_by_extension()
+
+    assert set(BookFile.objects.values_list("content_hash", "ignored")) == {
+        ("aa", False),
+        ("bb", True),
+        ("cc", True),
+    }
+    assert str(IgnoredExtension.objects.first()) == " .PDF"
+
+
+def test_no_ignored_extension_leaves_every_file_as_it_is():
+    files = BookFileRepository()
+    files.create([MORT_FILE])
+
+    files.ignore_by_extension()
+
+    assert not BookFile.objects.get().ignored

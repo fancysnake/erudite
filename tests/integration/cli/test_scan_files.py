@@ -4,7 +4,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from erudite.links.db.django.models import BookFile
+from erudite.links.db.django.models import BookFile, IgnoredExtension
 from tests.book_files import write_epub, write_pdf
 
 pytestmark = pytest.mark.django_db
@@ -64,6 +64,33 @@ def test_a_renamed_file_keeps_its_record_under_the_new_path(shelf):
 
     assert output == "Files added: 0. Already known: 2.\n"
     assert BookFile.objects.get(title="Mort").path == str(shelf / "pratchett-mort.epub")
+
+
+def test_every_file_is_recorded_and_an_ignored_extension_marks_its_files(shelf):
+    (shelf / "cover.png").write_bytes(b"image")
+    (shelf / "comics.zip").write_bytes(b"archive")
+    IgnoredExtension.objects.create(extension="png")
+
+    output = _run("scan_files", str(shelf))
+
+    assert output == "Files added: 4. Already known: 0.\n"
+    assert list(BookFile.objects.values_list("title", "ignored")) == [
+        ("Mort", False),
+        ("comics", False),
+        ("cover", True),
+        ("scan_0042", False),
+    ]
+
+
+def test_an_extension_ignored_after_a_scan_marks_the_files_on_the_next_scan(shelf):
+    _run("scan_files", str(shelf))
+    IgnoredExtension.objects.create(extension="pdf")
+
+    _run("scan_files", str(shelf))
+
+    assert [str(file) for file in BookFile.objects.filter(ignored=True)] == [
+        "scan_0042"
+    ]
 
 
 def test_a_path_that_is_no_directory_is_an_error(tmp_path):

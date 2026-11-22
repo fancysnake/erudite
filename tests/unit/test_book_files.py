@@ -37,6 +37,18 @@ def test_a_first_scan_adds_every_file_with_its_metadata():
     files.move.assert_not_called()
 
 
+def test_a_scan_marks_the_files_with_an_ignored_extension_after_it_adds_files():
+    service, files, _ = _scanner(found={"aa": MORT_FILE})
+
+    service.scan(SHELF)
+
+    assert [call[0] for call in files.method_calls] == [
+        "paths",
+        "create",
+        "ignore_by_extension",
+    ]
+
+
 def test_a_file_that_gives_no_title_takes_its_file_name():
     service, files, _ = _scanner(found={"bb": DUNE_FILE})
 

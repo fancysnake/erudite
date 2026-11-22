@@ -69,6 +69,7 @@ class BookFile(models.Model):
     title = models.CharField(_("title"), max_length=510)
     authors = models.JSONField(_("authors"), default=list, blank=True)
     isbn = models.CharField(_("ISBN"), max_length=13, blank=True)
+    ignored = models.BooleanField(_("ignored"), default=False)
 
     class Meta:
         ordering: ClassVar = ["title"]
@@ -77,6 +78,23 @@ class BookFile(models.Model):
 
     def __str__(self) -> str:
         return str(self.title)
+
+
+class IgnoredExtension(models.Model):
+    extension = models.CharField(
+        _("extension"),
+        max_length=20,
+        unique=True,
+        help_text=_("Without the dot, for example: png."),
+    )
+
+    class Meta:
+        ordering: ClassVar = ["extension"]
+        verbose_name = _("ignored file extension")
+        verbose_name_plural = _("ignored file extensions")
+
+    def __str__(self) -> str:
+        return str(self.extension)
 
 
 class BookAuthor(models.Model):

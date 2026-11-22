@@ -21,16 +21,17 @@ def _hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_find_maps_the_hash_of_every_epub_and_pdf_below_the_directory(tmp_path):
+def test_find_maps_the_hash_of_every_file_below_the_directory(tmp_path):
     (tmp_path / "shelf").mkdir()
     mort = write_epub(tmp_path / "shelf" / "mort.EPUB", title="Mort")
     dune = write_pdf(tmp_path / "dune.pdf", Title="Dune")
-    (tmp_path / "notes.txt").write_text("not a book")
+    cover = tmp_path / "cover.png"
+    cover.write_bytes(b"not a book")
     (tmp_path / "folder.pdf").mkdir()
 
     found = DiskBookFiles().find(tmp_path)
 
-    assert found == {_hash(dune): dune, _hash(mort): mort}
+    assert found == {_hash(cover): cover, _hash(dune): dune, _hash(mort): mort}
 
 
 def test_find_keeps_the_first_path_of_files_with_equal_content(tmp_path):
@@ -151,6 +152,10 @@ def test_an_epub_whose_container_names_no_package_document_gives_nothing(tmp_pat
         )
 
     assert DiskBookFiles().read(path) == NOTHING
+
+
+def test_a_file_of_another_format_gives_nothing_and_is_not_opened(tmp_path):
+    assert DiskBookFiles().read(tmp_path / "missing.zip") == NOTHING
 
 
 @pytest.mark.parametrize("suffix", (".epub", ".pdf"))

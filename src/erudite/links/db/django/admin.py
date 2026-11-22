@@ -8,7 +8,13 @@ from django.urls import reverse
 from django.utils.html import format_html_join
 from django.utils.translation import gettext_lazy as _
 
-from erudite.links.db.django.models import Author, Book, BookAuthor, BookFile
+from erudite.links.db.django.models import (
+    Author,
+    Book,
+    BookAuthor,
+    BookFile,
+    IgnoredExtension,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -21,11 +27,13 @@ if TYPE_CHECKING:
     AuthorAdminBase = admin.ModelAdmin[Author]
     BookAdminBase = admin.ModelAdmin[Book]
     BookFileAdminBase = admin.ModelAdmin[BookFile]
+    IgnoredExtensionAdminBase = admin.ModelAdmin[IgnoredExtension]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
 else:
     from unfold.admin import ModelAdmin, TabularInline
 
     AuthorAdminBase = BookAdminBase = BookFileAdminBase = ModelAdmin
+    IgnoredExtensionAdminBase = ModelAdmin
     BookAuthorInlineBase = TabularInline
 
 
@@ -110,6 +118,13 @@ def _author_names(file: BookFile) -> str:
 
 @admin.register(BookFile)
 class BookFileAdmin(BookFileAdminBase):
-    list_display = ("title", _author_names, "isbn", "path")
+    list_display = ("title", _author_names, "isbn", "path", "ignored")
+    list_editable = ("ignored",)
+    list_filter = ("ignored",)
     search_fields = ("title", "authors", "isbn", "path")
     readonly_fields = ("path", "content_hash")
+
+
+@admin.register(IgnoredExtension)
+class IgnoredExtensionAdmin(IgnoredExtensionAdminBase):
+    search_fields = ("extension",)

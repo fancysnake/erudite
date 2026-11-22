@@ -72,4 +72,5 @@ class BookFilesService(BookFilesServiceProtocol):
             ):
                 self._files.move(content_hash, path)
         self._files.create(new)
+        self._files.ignore_by_extension()
         return ImportSummaryDTO(created=len(new), skipped=len(found) - len(new))

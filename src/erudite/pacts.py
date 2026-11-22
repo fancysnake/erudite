@@ -77,17 +77,17 @@ class BookRepositoryProtocol(Protocol):
 
 class DiskBookFilesProtocol(Protocol):
     def find(self, directory: Path) -> dict[str, Path]:
-        """Map content hash to path for every EPUB and PDF under `directory`.
+        """Map content hash to path for every file under `directory`.
 
         Of files with equal content, the first path in sort order stays.
         `FileScanError` if the directory or a file cannot be read.
         """
 
     def read(self, path: Path) -> BookFileMetadata:
-        """Read the metadata embedded in the file; never its pages.
+        """Read the metadata embedded in an EPUB or PDF; never its pages.
 
-        A damaged file gives empty metadata. `FileScanError` if the file cannot
-        be opened or read.
+        A damaged file, or one of another format, gives empty metadata.
+        `FileScanError` if the file cannot be opened or read.
         """
 
     def exists(self, path: Path) -> bool: ...
@@ -103,6 +103,9 @@ class BookFileRepositoryProtocol(Protocol):
     def move(self, content_hash: str, path: Path) -> None:
         """Point the stored file with this content at `path`."""
 
+    def ignore_by_extension(self) -> None:
+        """Mark as ignored every stored file with an ignored extension."""
+
 
 class LibraryServiceProtocol(Protocol):
     def book_count(self) -> int: ...
@@ -113,7 +116,10 @@ class LibraryServiceProtocol(Protocol):
 
 class BookFilesServiceProtocol(Protocol):
     def scan(self, directory: Path) -> ImportSummaryDTO:
-        """Add the EPUB and PDF files under `directory` that are not stored."""
+        """Add the files under `directory` that are not stored.
+
+        A file with an ignored extension is stored as ignored.
+        """
 
 
 class ServicesProtocol(Protocol):

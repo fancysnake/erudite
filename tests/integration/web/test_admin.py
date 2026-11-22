@@ -4,7 +4,7 @@ from http import HTTPStatus
 import pytest
 
 from erudite.links.db.django import admin as admin_module
-from erudite.links.db.django.models import Author, Book, BookFile
+from erudite.links.db.django.models import Author, Book, BookFile, IgnoredExtension
 from erudite.pacts import ReadingStatus
 
 pytestmark = pytest.mark.django_db
@@ -175,6 +175,7 @@ def test_admin_corrects_a_book_file_and_keeps_its_path_and_hash(admin_client):
             "title": "Dune",
             "authors": '["Frank Herbert"]',
             "isbn": "9780441172719",
+            "ignored": "on",
             "path": "/elsewhere.pdf",
             "content_hash": "cc",
         },
@@ -189,4 +190,27 @@ def test_admin_corrects_a_book_file_and_keeps_its_path_and_hash(admin_client):
         "title": "Dune",
         "authors": ["Frank Herbert"],
         "isbn": "9780441172719",
+        "ignored": True,
     }
+
+
+def test_admin_filters_book_files_by_ignored(admin_client):
+    BookFile.objects.create(path="/b/mort.epub", content_hash="aa", title="Mort")
+    BookFile.objects.create(
+        path="/b/scans.zip", content_hash="bb", title="scans", ignored=True
+    )
+
+    response = admin_client.get("/admin/erudite_db/bookfile/", {"ignored__exact": "1"})
+
+    assert response.status_code == HTTPStatus.OK
+    assert [str(file) for file in response.context["cl"].result_list] == ["scans"]
+
+
+def test_admin_adds_an_ignored_file_extension(admin_client):
+    response = admin_client.post(
+        "/admin/erudite_db/ignoredextension/add/", {"extension": "png"}
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == "/admin/erudite_db/ignoredextension/"
+    assert IgnoredExtension.objects.values_list("extension", flat=True).get() == "png"

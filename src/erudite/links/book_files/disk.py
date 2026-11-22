@@ -1,4 +1,4 @@
-"""EPUB and PDF files in a directory on this machine, opened for reading only."""
+"""Files in a directory on this machine, opened for reading only."""
 
 import hashlib
 import re
@@ -95,7 +95,7 @@ _READERS = {".epub": _epub, ".pdf": _pdf}
 def _by_hash(directory: Path) -> dict[str, Path]:
     found: dict[str, Path] = {}
     for path in sorted(directory.resolve().rglob("*")):
-        if path.suffix.lower() in _READERS and path.is_file():
+        if path.is_file():
             with path.open("rb") as file:
                 content_hash = hashlib.file_digest(file, "sha256").hexdigest()
             found.setdefault(content_hash, path)
@@ -116,8 +116,10 @@ class DiskBookFiles(DiskBookFilesProtocol):
 
     @override
     def read(self, path: Path) -> BookFileMetadata:
+        if (reader := _READERS.get(path.suffix.lower())) is None:
+            return _nothing()
         try:
-            return _READERS[path.suffix.lower()](path)
+            return reader(path)
         except (
             zipfile.BadZipFile,
             ElementTree.ParseError,
