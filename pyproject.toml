@@ -375,6 +375,7 @@ ignore_names = [
     "Command",
     "Meta",
     "application",
+    "constraints",
     "help",
     "label",
     "name",
@@ -383,8 +384,12 @@ ignore_names = [
     "verbose_name",
     "verbose_name_plural",
     # Django admin options, read by the admin site
+    "autocomplete_fields",
+    "extra",
+    "inlines",
     "list_display",
     "list_filter",
+    "model",
     "search_fields",
     # Book columns and write-dict keys, passed as a whole and not named in code
     "authors",

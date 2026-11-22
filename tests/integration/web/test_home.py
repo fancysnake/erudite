@@ -20,9 +20,7 @@ def test_home_shows_the_empty_library(browser):
 
 @pytest.mark.parametrize(("count", "text"), ((1, "1 book."), (2, "2 books.")))
 def test_home_counts_the_books(browser, *, count, text):
-    Book.objects.bulk_create(
-        Book(title=f"Book {number}", authors=["Anonymous"]) for number in range(count)
-    )
+    Book.objects.bulk_create(Book(title=f"Book {number}") for number in range(count))
 
     response = browser.get("/")
 

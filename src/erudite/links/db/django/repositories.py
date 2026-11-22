@@ -2,7 +2,9 @@
 
 from typing import override
 
-from erudite.links.db.django.models import Book
+from django.db import transaction
+
+from erudite.links.db.django.models import Author, Book, BookAuthor
 from erudite.pacts import BookRepositoryProtocol, GoodreadsBookData
 
 
@@ -21,4 +23,20 @@ class BookRepository(BookRepositoryProtocol):
 
     @override
     def create_from_goodreads(self, books: list[GoodreadsBookData]) -> None:
-        Book.objects.bulk_create(Book(**book) for book in books)
+        # A book may name one author twice; dict keys keep the first place.
+        names = [list(dict.fromkeys(book["authors"])) for book in books]
+        with transaction.atomic():
+            Author.objects.bulk_create(
+                (Author(name=name) for name in {n for group in names for n in group}),
+                ignore_conflicts=True,
+            )
+            authors = {author.name: author for author in Author.objects.all()}
+            created = Book.objects.bulk_create(
+                Book(**{k: v for k, v in book.items() if k != "authors"})
+                for book in books
+            )
+            BookAuthor.objects.bulk_create(
+                BookAuthor(book=book, author=authors[name], position=position)
+                for book, group in zip(created, names, strict=True)
+                for position, name in enumerate(group)
+            )
