@@ -1,6 +1,6 @@
 import datetime as dt
 
-from erudite.pacts import ReadingStatus
+from erudite.pacts import BookSource, ReadingStatus
 
 # The header of a Goodreads library export, in the order Goodreads writes it.
 GOODREADS_COLUMNS = (
@@ -43,7 +43,8 @@ MORT = {
 }
 # What the app holds for the `MORT` row.
 MORT_BOOK = {
-    "goodreads_id": 386372,
+    "source": BookSource.GOODREADS,
+    "key": "386372",
     "title": "Mort",
     "authors": ["Terry Pratchett"],
     "isbn10": "0552131067",

@@ -4,8 +4,8 @@ import pytest
 from django.core.management import call_command, load_command_class
 from django.core.management.base import CommandError
 
-from erudite.links.db.django.models import Book
-from erudite.pacts import ReadingStatus
+from erudite.links.db.django.models import Book, RawBook
+from erudite.pacts import BookSource, ReadingStatus
 from tests.goodreads import DUNE, MORT
 
 pytestmark = pytest.mark.django_db
@@ -24,6 +24,10 @@ def test_every_book_of_the_export_appears_once(goodreads_export):
     assert list(Book.objects.values_list("title", "series", "status")) == [
         ("Dune", "", ReadingStatus.TO_READ),
         ("Mort", "Discworld", ReadingStatus.READ),
+    ]
+    assert list(RawBook.objects.values_list("source", "key", "book__title")) == [
+        (BookSource.GOODREADS, "44767458", "Dune"),
+        (BookSource.GOODREADS, "386372", "Mort"),
     ]
 
 
@@ -57,6 +61,7 @@ def test_an_export_with_a_bad_row_adds_no_book(goodreads_export):
     with pytest.raises(CommandError, match=r"\.csv, row 3: "):
         call_command("import_goodreads", str(path))
     assert not Book.objects.exists()
+    assert not RawBook.objects.exists()
 
 
 def test_help_builds_no_services(settings):

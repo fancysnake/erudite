@@ -9,15 +9,17 @@ and this project adheres to [Semantic Versioning].
 
 ### Added
 
-- `mise run dj scan_files <directory>` records every file under a directory,
-  with the metadata an EPUB or PDF carries; a second scan adds nothing and no
-  file is written to.
-- A file can be marked as ignored in the admin; the scan marks every file whose
-  extension is on the list of ignored file extensions.
-- Book files show in the admin, where their details can be corrected.
+- `mise run dj scan_files <directory>` adds every file under a directory as a
+  book, with the metadata an EPUB or PDF carries; a second scan adds nothing and
+  no file is written to.
+- The scan leaves out a file whose extension is on the list of ignored file
+  extensions.
 - `mise run dj import_goodreads <export.csv>` adds the books of a Goodreads
   library export; a second import leaves books already in the library unchanged.
-- Books show in the admin, where the reading status can be changed.
+- The import and the scan keep what they found as a read-only raw book next to
+  the book. A book deleted from the library is not added again.
+- Books show in the admin, where the reading status can be changed and a filter
+  finds the books that have no author.
 - The home page counts the books in the library.
 
 ## [0.1.0] - 2026-11-21

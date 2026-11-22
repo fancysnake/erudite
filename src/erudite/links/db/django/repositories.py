@@ -9,15 +9,13 @@ from erudite.links.db.django.models import (
     Author,
     Book,
     BookAuthor,
-    BookFile,
     IgnoredExtension,
+    RawBook,
 )
-from erudite.pacts import (
-    BookFileData,
-    BookFileRepositoryProtocol,
-    BookRepositoryProtocol,
-    GoodreadsBookData,
-)
+from erudite.pacts import BookRepositoryProtocol, BookSource, RawBookData
+
+# What a raw book holds that the book made for it does not copy.
+_RAW_ONLY = {"source", "key", "path", "authors"}
 
 
 class BookRepository(BookRepositoryProtocol):
@@ -26,12 +24,16 @@ class BookRepository(BookRepositoryProtocol):
         return Book.objects.count()
 
     @override
-    def goodreads_ids(self) -> set[int]:
-        ids = Book.objects.values_list("goodreads_id", flat=True)
-        return {key for key in ids if key is not None}
+    def keys(self, source: BookSource) -> set[str]:
+        return set(RawBook.objects.filter(source=source).values_list("key", flat=True))
 
     @override
-    def create_from_goodreads(self, books: list[GoodreadsBookData]) -> None:
+    def file_paths(self) -> dict[str, Path]:
+        rows = RawBook.objects.filter(source=BookSource.FILE)
+        return {key: Path(path) for key, path in rows.values_list("key", "path")}
+
+    @override
+    def create(self, books: list[RawBookData]) -> None:
         # A book may name one author twice; dict keys keep the first place.
         names = [list(dict.fromkeys(book["authors"])) for book in books]
         with transaction.atomic():
@@ -41,7 +43,7 @@ class BookRepository(BookRepositoryProtocol):
             )
             authors = {author.name: author for author in Author.objects.all()}
             created = Book.objects.bulk_create(
-                Book(**{k: v for k, v in book.items() if k != "authors"})
+                Book(**{k: v for k, v in book.items() if k not in _RAW_ONLY})
                 for book in books
             )
             BookAuthor.objects.bulk_create(
@@ -49,24 +51,16 @@ class BookRepository(BookRepositoryProtocol):
                 for book, group in zip(created, names, strict=True)
                 for position, name in enumerate(group)
             )
-
-
-class BookFileRepository(BookFileRepositoryProtocol):
-    @override
-    def paths(self) -> dict[str, Path]:
-        rows = BookFile.objects.values_list("content_hash", "path")
-        return {content_hash: Path(path) for content_hash, path in rows}
-
-    @override
-    def create(self, files: list[BookFileData]) -> None:
-        with transaction.atomic():
-            BookFile.objects.bulk_create(
-                BookFile(**file | {"path": str(file["path"])}) for file in files
+            RawBook.objects.bulk_create(
+                RawBook(**raw | {"path": str(raw.get("path", ""))}, book=book)
+                for book, raw in zip(created, books, strict=True)
             )
 
     @override
-    def move(self, content_hash: str, path: Path) -> None:
-        BookFile.objects.filter(content_hash=content_hash).update(path=str(path))
+    def move_file(self, content_hash: str, path: Path) -> None:
+        RawBook.objects.filter(source=BookSource.FILE, key=content_hash).update(
+            path=str(path)
+        )
 
     @override
     def ignored_extensions(self) -> set[str]:

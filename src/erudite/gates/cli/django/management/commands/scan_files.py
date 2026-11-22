@@ -12,9 +12,9 @@ if TYPE_CHECKING:
 
 class Command(BaseCommand):
     help = (
-        "Add the files under a directory that the library does not know yet, with"
-        " the metadata of each EPUB and PDF. A file with an ignored extension is"
-        " marked as ignored. The files are only read."
+        "Add each file under a directory that the library does not know yet as a"
+        " book, with the metadata of an EPUB or PDF. A file with an ignored"
+        " extension is left out. The files are only read."
     )
 
     @override

@@ -12,8 +12,8 @@ from erudite.links.db.django.models import (
     Author,
     Book,
     BookAuthor,
-    BookFile,
     IgnoredExtension,
+    RawBook,
 )
 
 if TYPE_CHECKING:
@@ -26,13 +26,13 @@ if TYPE_CHECKING:
     # Unfold's admin classes are Django's, restyled; type-check against Django's.
     AuthorAdminBase = admin.ModelAdmin[Author]
     BookAdminBase = admin.ModelAdmin[Book]
-    BookFileAdminBase = admin.ModelAdmin[BookFile]
+    RawBookAdminBase = admin.ModelAdmin[RawBook]
     IgnoredExtensionAdminBase = admin.ModelAdmin[IgnoredExtension]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
 else:
     from unfold.admin import ModelAdmin, TabularInline
 
-    AuthorAdminBase = BookAdminBase = BookFileAdminBase = ModelAdmin
+    AuthorAdminBase = BookAdminBase = RawBookAdminBase = ModelAdmin
     IgnoredExtensionAdminBase = ModelAdmin
     BookAuthorInlineBase = TabularInline
 
@@ -102,7 +102,8 @@ def _author_links(book: Book) -> SafeString:
 @admin.register(Book)
 class BookAdmin(BookAdminBase):
     list_display = ("title", _author_links, "series", "series_position", "status")
-    list_filter = ("status",)
+    # A book from a file that names no author has none: the filter finds those.
+    list_filter = ("status", ("credits", admin.EmptyFieldListFilter))
     search_fields = ("title", "authors__name", "series", "isbn10", "isbn13")
     inlines = (BookAuthorInline,)
 
@@ -112,17 +113,36 @@ class BookAdmin(BookAdminBase):
 
 
 @admin.display(description=_("authors"))
-def _author_names(file: BookFile) -> str:
-    return ", ".join(file.authors)
+def _author_names(raw_book: RawBook) -> str:
+    return ", ".join(raw_book.authors)
 
 
-@admin.register(BookFile)
-class BookFileAdmin(BookFileAdminBase):
-    list_display = ("title", _author_names, "isbn", "path", "ignored")
-    list_editable = ("ignored",)
-    list_filter = ("ignored",)
-    search_fields = ("title", "authors", "isbn", "path")
-    readonly_fields = ("path", "content_hash")
+@admin.register(RawBook)
+class RawBookAdmin(RawBookAdminBase):
+    list_display = ("title", _author_names, "source", "path", "book")
+    list_filter = ("source",)
+    search_fields = ("title", "authors", "isbn10", "isbn13", "path")
+    # Only a source writes a raw book; the user edits the book.
+    readonly_fields = (
+        "book",
+        "source",
+        "key",
+        "path",
+        "title",
+        "authors",
+        "isbn10",
+        "isbn13",
+        "series",
+        "series_position",
+        "rating",
+        "date_added",
+        "date_read",
+        "status",
+    )
+
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
 
 
 @admin.register(IgnoredExtension)

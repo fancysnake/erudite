@@ -3,7 +3,7 @@ import datetime as dt
 import pytest
 
 from erudite.links.goodreads.csv import GoodreadsCsvExport
-from erudite.pacts import GoodreadsExportError, ReadingStatus
+from erudite.pacts import BookSource, GoodreadsExportError, ReadingStatus
 from tests.goodreads import DUNE, GOODREADS_COLUMNS, MORT, MORT_BOOK
 
 
@@ -17,7 +17,8 @@ def test_a_book_keeps_everything_the_export_says_about_it(goodreads_export):
     assert books == [
         MORT_BOOK,
         {
-            "goodreads_id": 44767458,
+            "source": BookSource.GOODREADS,
+            "key": "44767458",
             "title": "Dune",
             "authors": ["Frank Herbert"],
             "isbn10": "",
