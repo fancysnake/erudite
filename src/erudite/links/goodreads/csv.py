@@ -33,9 +33,13 @@ _COLUMNS = (
     "Date Read",
     "Exclusive Shelf",
 )
+# The shelves that name a status, strongest first. Every other shelf is a topic
+# and is dropped.
 _STATUS_BY_SHELF = {
+    "did-not-finish": ReadingStatus.DID_NOT_FINISH,
     "read": ReadingStatus.READ,
     "currently-reading": ReadingStatus.READING,
+    "must-read": ReadingStatus.MUST_READ,
 }
 
 
@@ -66,6 +70,14 @@ def _date(value: str) -> dt.date | None:
     return dt.date.strptime(value, "%Y/%m/%d") if value else None
 
 
+def _status(row: dict[str, str]) -> ReadingStatus:
+    shelves = {row["Exclusive Shelf"], *_split(row["Bookshelves"])}
+    return next(
+        (status for shelf, status in _STATUS_BY_SHELF.items() if shelf in shelves),
+        ReadingStatus.TO_READ,
+    )
+
+
 def _book(row: dict[str, str]) -> GoodreadsBookData:
     title = _squeeze(row["Title"])
     series = _SERIES.match(title)
@@ -77,12 +89,10 @@ def _book(row: dict[str, str]) -> GoodreadsBookData:
         isbn13=_isbn(row["ISBN13"]),
         series=series["series"] if series else "",
         series_position=series["position"] if series else "",
-        shelves=_split(row["Bookshelves"]),
         rating=_rating(row["My Rating"]),
         date_added=_date(row["Date Added"]),
         date_read=_date(row["Date Read"]),
-        # A shelf the app has no status for is still on the to-read side.
-        status=_STATUS_BY_SHELF.get(row["Exclusive Shelf"], ReadingStatus.TO_READ),
+        status=_status(row),
     )
 
 

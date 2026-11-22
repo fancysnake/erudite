@@ -50,7 +50,6 @@ MORT_BOOK = {
     "isbn13": "9780552131063",
     "series": "Discworld",
     "series_position": "4",
-    "shelves": ["fantasy", "favourites"],
     "rating": 5,
     "date_added": dt.date(2019, 12, 24),
     "date_read": dt.date(2020, 3, 1),

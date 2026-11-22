@@ -9,8 +9,10 @@ from erudite.pacts import ReadingStatus
 
 _STATUS_LABELS = {
     ReadingStatus.TO_READ: _("To read"),
+    ReadingStatus.MUST_READ: _("Must read"),
     ReadingStatus.READING: _("Reading"),
     ReadingStatus.READ: _("Read"),
+    ReadingStatus.DID_NOT_FINISH: _("Did not finish"),
 }
 
 
@@ -41,7 +43,6 @@ class Book(models.Model):
     series_position = models.CharField(
         _("position in series"), max_length=20, blank=True
     )
-    shelves = models.JSONField(_("shelves"), default=list, blank=True)
     rating = models.PositiveSmallIntegerField(_("rating"), null=True, blank=True)
     date_added = models.DateField(_("date added"), null=True, blank=True)
     date_read = models.DateField(_("date read"), null=True, blank=True)

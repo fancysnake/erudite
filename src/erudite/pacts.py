@@ -11,8 +11,10 @@ if TYPE_CHECKING:
 
 class ReadingStatus(StrEnum):
     TO_READ = "to_read"
+    MUST_READ = "must_read"
     READING = "reading"
     READ = "read"
+    DID_NOT_FINISH = "did_not_finish"
 
 
 class GoodreadsExportError(Exception):
@@ -29,7 +31,6 @@ class GoodreadsBookData(TypedDict):
     isbn13: str
     series: str
     series_position: str
-    shelves: list[str]
     rating: int | None
     date_added: dt.date | None
     date_read: dt.date | None

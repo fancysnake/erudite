@@ -24,7 +24,6 @@ def test_a_book_keeps_everything_the_export_says_about_it(goodreads_export):
             "isbn13": "",
             "series": "",
             "series_position": "",
-            "shelves": ["to-read"],
             "rating": None,
             "date_added": dt.date(2021, 5, 5),
             "date_read": None,
@@ -72,16 +71,25 @@ def test_an_isbn_loses_its_spreadsheet_formula(goodreads_export, *, exported, is
 
 
 @pytest.mark.parametrize(
-    ("shelf", "status"),
+    ("exclusive", "shelves", "status"),
     (
-        ("read", ReadingStatus.READ),
-        ("currently-reading", ReadingStatus.READING),
-        ("to-read", ReadingStatus.TO_READ),
-        ("abandoned", ReadingStatus.TO_READ),
+        ("read", "", ReadingStatus.READ),
+        ("currently-reading", "currently-reading", ReadingStatus.READING),
+        ("to-read", "to-read", ReadingStatus.TO_READ),
+        ("to-read", "to-read, must-read", ReadingStatus.MUST_READ),
+        ("did-not-finish", "did-not-finish", ReadingStatus.DID_NOT_FINISH),
+        ("abandoned", "abandoned", ReadingStatus.TO_READ),
+        ("to-read", "to-read, fantasy", ReadingStatus.TO_READ),
+        # A book on two status shelves: stopped beats read beats wanted.
+        ("read", "did-not-finish, must-read", ReadingStatus.DID_NOT_FINISH),
+        ("read", "must-read", ReadingStatus.READ),
+        ("currently-reading", "must-read", ReadingStatus.READING),
     ),
 )
-def test_the_exclusive_shelf_gives_the_status(goodreads_export, *, shelf, status):
-    book = _read_one(goodreads_export, **{"Exclusive Shelf": shelf})
+def test_the_shelves_give_the_status(goodreads_export, *, exclusive, shelves, status):
+    book = _read_one(
+        goodreads_export, **{"Exclusive Shelf": exclusive, "Bookshelves": shelves}
+    )
 
     assert book["status"] == status
 
