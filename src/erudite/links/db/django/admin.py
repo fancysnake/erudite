@@ -1,6 +1,6 @@
 """Admin registrations (django-unfold), model-coupled by design."""
 
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Protocol, override, runtime_checkable
 
 from django.contrib import admin
 from django.db.models import Count
@@ -27,6 +27,14 @@ else:
     AuthorAdminBase = BookAdminBase = ModelAdmin
     BookAuthorInlineBase = TabularInline
 
+
+@runtime_checkable
+class _CountedAuthor(Protocol):
+    """An author from `AuthorAdmin.get_queryset`, which annotates the count."""
+
+    book_count: int
+
+
 _LINK = '<a href="{}" class="text-primary-600 dark:text-primary-500 underline">{}</a>'
 
 
@@ -42,10 +50,12 @@ def _links(page: str, rows: Iterable[Author | Book], *, separator: str) -> SafeS
     )
 
 
-# shortcut: one count query per listed author, read `book_count` if the list slows
 @admin.display(description=_("books"), ordering="book_count")
 def _book_count(author: Author) -> str:
-    return str(author.books.count())
+    if not isinstance(author, _CountedAuthor):
+        msg = "The author needs the book count from AuthorAdmin.get_queryset."
+        raise TypeError(msg)
+    return str(author.book_count)
 
 
 @admin.register(Author)

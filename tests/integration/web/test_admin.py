@@ -3,6 +3,7 @@ from http import HTTPStatus
 
 import pytest
 
+from erudite.links.db.django import admin as admin_module
 from erudite.links.db.django.models import Author, Book
 from erudite.pacts import ReadingStatus
 
@@ -140,3 +141,8 @@ def test_admin_sends_a_visitor_to_the_login(client):
 
     assert response.status_code == HTTPStatus.FOUND
     assert response.url == "/admin/login/?next=/admin/"
+
+
+def test_author_book_count_column_rejects_an_author_without_the_count():
+    with pytest.raises(TypeError, match="book count"):
+        admin_module.AuthorAdmin.list_display[1](Author(name="Terry Pratchett"))
