@@ -2,32 +2,30 @@
 
 from typing import TYPE_CHECKING, override
 
-from erudite.pacts import BookFileData, ImportSummaryDTO, LibraryServiceProtocol
+from erudite.pacts import (
+    BookFileData,
+    BookFilesServiceProtocol,
+    ImportSummaryDTO,
+    LibraryServiceProtocol,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from erudite.pacts import (
         BookFileRepositoryProtocol,
-        BookFilesProtocol,
         BookRepositoryProtocol,
+        DiskBookFilesProtocol,
         GoodreadsExportProtocol,
     )
 
 
 class LibraryService(LibraryServiceProtocol):
     def __init__(
-        self,
-        *,
-        books: BookRepositoryProtocol,
-        goodreads: GoodreadsExportProtocol,
-        files: BookFileRepositoryProtocol,
-        disk: BookFilesProtocol,
+        self, *, books: BookRepositoryProtocol, goodreads: GoodreadsExportProtocol
     ) -> None:
         self._books = books
         self._goodreads = goodreads
-        self._files = files
-        self._disk = disk
 
     @override
     def book_count(self) -> int:
@@ -43,8 +41,16 @@ class LibraryService(LibraryServiceProtocol):
         self._books.create_from_goodreads(new)
         return ImportSummaryDTO(created=len(new), skipped=len(exported) - len(new))
 
+
+class BookFilesService(BookFilesServiceProtocol):
+    def __init__(
+        self, *, files: BookFileRepositoryProtocol, disk: DiskBookFilesProtocol
+    ) -> None:
+        self._files = files
+        self._disk = disk
+
     @override
-    def scan_files(self, directory: Path) -> ImportSummaryDTO:
+    def scan(self, directory: Path) -> ImportSummaryDTO:
         found = self._disk.find(directory)
         known = self._files.paths()
         new: list[BookFileData] = []

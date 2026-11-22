@@ -75,7 +75,7 @@ class BookRepositoryProtocol(Protocol):
         """Add all of `books`, or none of them."""
 
 
-class BookFilesProtocol(Protocol):
+class DiskBookFilesProtocol(Protocol):
     def find(self, directory: Path) -> dict[str, Path]:
         """Map content hash to path for every EPUB and PDF under `directory`.
 
@@ -84,7 +84,11 @@ class BookFilesProtocol(Protocol):
         """
 
     def read(self, path: Path) -> BookFileMetadata:
-        """Read the metadata embedded in the file; never its pages."""
+        """Read the metadata embedded in the file; never its pages.
+
+        A damaged file gives empty metadata. `FileScanError` if the file cannot
+        be opened or read.
+        """
 
     def exists(self, path: Path) -> bool: ...
 
@@ -103,11 +107,13 @@ class BookFileRepositoryProtocol(Protocol):
 class LibraryServiceProtocol(Protocol):
     def book_count(self) -> int: ...
 
-    def scan_files(self, directory: Path) -> ImportSummaryDTO:
-        """Add the EPUB and PDF files under `directory` that are not stored."""
-
     def import_goodreads(self, path: Path) -> ImportSummaryDTO:
         """Add the books of the export at `path` that the library does not hold."""
+
+
+class BookFilesServiceProtocol(Protocol):
+    def scan(self, directory: Path) -> ImportSummaryDTO:
+        """Add the EPUB and PDF files under `directory` that are not stored."""
 
 
 class ServicesProtocol(Protocol):
@@ -115,6 +121,9 @@ class ServicesProtocol(Protocol):
 
     @property
     def library(self) -> LibraryServiceProtocol: ...
+
+    @property
+    def book_files(self) -> BookFilesServiceProtocol: ...
 
 
 class RootRequestProtocol(Protocol):

@@ -23,7 +23,7 @@ class Command(BaseCommand):
     @override
     def handle(self, *_args: str, **options: Path) -> None:
         try:
-            summary = build_services().library.scan_files(options["directory"])
+            summary = build_services().book_files.scan(options["directory"])
         except FileScanError as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(

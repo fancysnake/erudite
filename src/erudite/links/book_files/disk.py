@@ -10,15 +10,21 @@ from defusedxml.common import DefusedXmlException
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from erudite.pacts import BookFileMetadata, BookFilesProtocol, FileScanError
+from erudite.pacts import BookFileMetadata, DiskBookFilesProtocol, FileScanError
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from xml.etree.ElementTree import Element
 
 _DUBLIN_CORE = "{http://purl.org/dc/elements/1.1/}"
 _ISBN = re.compile(r"97[89]\d{10}|\d{9}[\dX]")
 _ISBN_PREFIX = re.compile(r"^(urn:)?isbn:", re.IGNORECASE)
-_NOTHING = BookFileMetadata(title="", authors=[], isbn="")
+_CONTAINER = "META-INF/container.xml"
+_OCF = "{urn:oasis:names:tc:opendocument:xmlns:container}"
+
+
+def _nothing() -> BookFileMetadata:
+    return BookFileMetadata(title="", authors=[], isbn="")
 
 
 def _squeeze(value: str | None) -> str:
@@ -31,13 +37,28 @@ def _isbn(identifier: str) -> str:
     return digits if _ISBN.fullmatch(digits) else ""
 
 
+def _xml(archive: zipfile.ZipFile, name: str) -> Element | None:
+    try:
+        data = archive.read(name)
+    except KeyError:
+        return None
+    return ElementTree.fromstring(data)
+
+
+def _package(archive: zipfile.ZipFile) -> Element | None:
+    """Return the package document that the container names; it holds the metadata."""
+    if (container := _xml(archive, _CONTAINER)) is None:
+        return None
+    if (rootfile := container.find(f".//{_OCF}rootfile")) is None:
+        return None
+    return _xml(archive, rootfile.get("full-path", ""))
+
+
 def _epub(path: Path) -> BookFileMetadata:
     with zipfile.ZipFile(path) as archive:
-        # The package document holds the metadata; an EPUB has one.
-        name = next((n for n in archive.namelist() if n.endswith(".opf")), None)
-        if name is None:
-            return _NOTHING
-        package = ElementTree.fromstring(archive.read(name))
+        package = _package(archive)
+    if package is None:
+        return _nothing()
 
     def texts(tag: str) -> list[str]:
         found = (_squeeze(node.text) for node in package.iter(_DUBLIN_CORE + tag))
@@ -81,7 +102,7 @@ def _by_hash(directory: Path) -> dict[str, Path]:
     return found
 
 
-class DiskBookFiles(BookFilesProtocol):
+class DiskBookFiles(DiskBookFilesProtocol):
     @override
     def find(self, directory: Path) -> dict[str, Path]:
         if not directory.is_dir():
@@ -104,7 +125,10 @@ class DiskBookFiles(BookFilesProtocol):
             PyPdfError,
         ):
             # A damaged file is still a file the user owns.
-            return _NOTHING
+            return _nothing()
+        except OSError as exc:
+            msg = f"{path}: {exc}"
+            raise FileScanError(msg) from exc
 
     @override
     def exists(self, path: Path) -> bool:

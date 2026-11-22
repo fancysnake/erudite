@@ -6,7 +6,13 @@ import pytest
 
 from erudite.links.book_files.disk import DiskBookFiles
 from erudite.pacts import FileScanError
-from tests.book_files import write_epub, write_pdf
+from tests.book_files import (
+    add_package,
+    container_xml,
+    package_xml,
+    write_epub,
+    write_pdf,
+)
 
 NOTHING = {"title": "", "authors": [], "isbn": ""}
 
@@ -108,10 +114,58 @@ def test_a_damaged_file_gives_nothing(tmp_path, *, content, suffix):
 )
 def test_an_epub_with_a_bad_package_document_gives_nothing(tmp_path, *, package):
     path = write_epub(tmp_path / "mort.epub", package=None)
-    with zipfile.ZipFile(path, "a") as archive:
-        archive.writestr("book.opf", package)
+    add_package(path, "book.opf", xml=package)
 
     assert DiskBookFiles().read(path) == NOTHING
+
+
+def test_an_epub_takes_the_package_document_its_container_names(tmp_path):
+    path = write_epub(tmp_path / "mort.epub", package=None)
+    add_package(path, "a.opf", xml=package_xml(title="Decoy"), declared=False)
+    add_package(path, "b.opf", xml=package_xml(title="Mort"))
+
+    assert DiskBookFiles().read(path) == NOTHING | {"title": "Mort"}
+
+
+def test_an_epub_whose_package_document_is_not_named_gives_nothing(tmp_path):
+    path = write_epub(tmp_path / "mort.epub", package=None)
+    add_package(path, "book.opf", xml=package_xml(title="Mort"), declared=False)
+
+    assert DiskBookFiles().read(path) == NOTHING
+
+
+def test_an_epub_whose_container_names_a_missing_file_gives_nothing(tmp_path):
+    path = write_epub(tmp_path / "mort.epub", package=None)
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.writestr("META-INF/container.xml", container_xml("missing.opf"))
+
+    assert DiskBookFiles().read(path) == NOTHING
+
+
+def test_an_epub_whose_container_names_no_package_document_gives_nothing(tmp_path):
+    path = write_epub(tmp_path / "mort.epub", package=None)
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.writestr(
+            "META-INF/container.xml",
+            '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"/>',
+        )
+
+    assert DiskBookFiles().read(path) == NOTHING
+
+
+@pytest.mark.parametrize("suffix", (".epub", ".pdf"))
+def test_read_reports_a_file_that_is_gone(tmp_path, *, suffix):
+    with pytest.raises(FileScanError, match=r"mort\.\w+: .*No such file"):
+        DiskBookFiles().read(tmp_path / f"mort{suffix}")
+
+
+def test_every_unreadable_file_gives_its_own_empty_result(tmp_path):
+    first = DiskBookFiles().read(write_epub(tmp_path / "a.epub", package=None))
+    first["authors"].append("Terry Pratchett")
+
+    assert (
+        DiskBookFiles().read(write_epub(tmp_path / "b.epub", package=None)) == NOTHING
+    )
 
 
 def test_a_pdf_gives_its_title_and_author_tags(tmp_path):
