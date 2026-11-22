@@ -9,4 +9,5 @@ if TYPE_CHECKING:
 
 
 def home(request: RootRequest) -> HttpResponse:
-    return render(request, "erudite/pages/home.html")
+    context = {"book_count": request.services.library.book_count()}
+    return render(request, "erudite/pages/home.html", context)

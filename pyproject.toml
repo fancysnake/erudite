@@ -372,10 +372,30 @@ ignore_names = [
     # Django
     "*Config",
     "*Middleware",
+    "Command",
+    "Meta",
     "application",
+    "help",
     "label",
     "name",
+    "ordering",
     "urlpatterns",
+    "verbose_name",
+    "verbose_name_plural",
+    # Django admin options, read by the admin site
+    "list_display",
+    "list_filter",
+    "search_fields",
+    # Book columns and write-dict keys, passed as a whole and not named in code
+    "authors",
+    "date_added",
+    "date_read",
+    "goodreads_id",
+    "isbn10",
+    "isbn13",
+    "rating",
+    "series_position",
+    "shelves",
 ]
-ignore_decorators = ["@override"]
+ignore_decorators = ["@admin.register", "@override"]
 sort_by_size = true

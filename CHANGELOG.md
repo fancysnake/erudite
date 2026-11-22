@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning].
 
 ## [Unreleased]
 
+### Added
+
+- `mise run dj import_goodreads <export.csv>` adds the books of a Goodreads
+  library export; a second import leaves books already in the library unchanged.
+- Books show in the admin, where the reading status can be changed.
+- The home page counts the books in the library.
+
 ## [0.1.0] - 2026-11-21
 
 ### Added

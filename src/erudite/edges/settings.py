@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "erudite.links.db.django.apps.DbConfig",
+    "erudite.gates.cli.django.apps.CliGatesConfig",
 ]
 
 MIDDLEWARE = [
@@ -53,6 +54,8 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "erudite.gates.web.django.urls"
+# Commands build their services from this path; gates never import inits.
+SERVICES_FACTORY = "erudite.inits.Services"
 
 TEMPLATES = [
     {

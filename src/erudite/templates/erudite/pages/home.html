@@ -2,5 +2,15 @@
 {% load i18n %}
 {% block content %}
   <h1>{% translate "Your library" %}</h1>
-  <p>{% translate "No books yet." %}</p>
+  {% if book_count %}
+    <p>
+      {% blocktranslate count counter=book_count trimmed %}
+        {{ counter }} book.
+      {% plural %}
+        {{ counter }} books.
+      {% endblocktranslate %}
+    </p>
+  {% else %}
+    <p>{% translate "No books yet." %}</p>
+  {% endif %}
 {% endblock content %}
