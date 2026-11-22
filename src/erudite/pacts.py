@@ -37,6 +37,23 @@ class GoodreadsBookData(TypedDict):
     status: ReadingStatus
 
 
+class FileScanError(Exception):
+    """The directory cannot be scanned for book files."""
+
+
+class BookFileMetadata(TypedDict):
+    """What a book file says about itself; empty where it says nothing."""
+
+    title: str
+    authors: list[str]
+    isbn: str
+
+
+class BookFileData(BookFileMetadata):
+    path: Path
+    content_hash: str
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ImportSummaryDTO:
     created: int
@@ -58,8 +75,36 @@ class BookRepositoryProtocol(Protocol):
         """Add all of `books`, or none of them."""
 
 
+class BookFilesProtocol(Protocol):
+    def find(self, directory: Path) -> dict[str, Path]:
+        """Map content hash to path for every EPUB and PDF under `directory`.
+
+        Of files with equal content, the first path in sort order stays.
+        `FileScanError` if the directory or a file cannot be read.
+        """
+
+    def read(self, path: Path) -> BookFileMetadata:
+        """Read the metadata embedded in the file; never its pages."""
+
+    def exists(self, path: Path) -> bool: ...
+
+
+class BookFileRepositoryProtocol(Protocol):
+    def paths(self) -> dict[str, Path]:
+        """Map content hash to path for every stored file."""
+
+    def create(self, files: list[BookFileData]) -> None:
+        """Add all of `files`, or none of them."""
+
+    def move(self, content_hash: str, path: Path) -> None:
+        """Point the stored file with this content at `path`."""
+
+
 class LibraryServiceProtocol(Protocol):
     def book_count(self) -> int: ...
+
+    def scan_files(self, directory: Path) -> ImportSummaryDTO:
+        """Add the EPUB and PDF files under `directory` that are not stored."""
 
     def import_goodreads(self, path: Path) -> ImportSummaryDTO:
         """Add the books of the export at `path` that the library does not hold."""

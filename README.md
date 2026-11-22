@@ -30,6 +30,18 @@ mise run dj import_goodreads ~/Downloads/goodreads_library_export.csv
 The import adds the books the library does not hold yet. It never changes a
 book that is already there, so you can run it again after each new export.
 
+## Scan your e-book files
+
+```sh
+mise run dj scan_files ~/Books
+```
+
+The scan records every EPUB and PDF under the directory, with the title,
+authors and ISBN the file carries. A file that carries no title is recorded
+under its file name; correct it in the admin under Book files. The scan only
+reads the files. Run it again after you add files: it skips the ones it knows,
+even after you rename or move them.
+
 ## Work on it
 
 ```sh

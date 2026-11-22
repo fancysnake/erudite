@@ -3,7 +3,8 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from erudite.links.db.django.repositories import BookRepository
+from erudite.links.book_files.disk import DiskBookFiles
+from erudite.links.db.django.repositories import BookFileRepository, BookRepository
 from erudite.links.goodreads.csv import GoodreadsCsvExport
 from erudite.mills import LibraryService
 from erudite.pacts import RootRequestProtocol, ServicesProtocol
@@ -17,7 +18,12 @@ class Services(ServicesProtocol):
 
     @cached_property
     def library(self) -> LibraryService:
-        return LibraryService(books=BookRepository(), goodreads=GoodreadsCsvExport())
+        return LibraryService(
+            books=BookRepository(),
+            goodreads=GoodreadsCsvExport(),
+            files=BookFileRepository(),
+            disk=DiskBookFiles(),
+        )
 
 
 class ServiceInjectionMiddleware[Response]:

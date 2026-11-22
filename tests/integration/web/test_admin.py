@@ -4,7 +4,7 @@ from http import HTTPStatus
 import pytest
 
 from erudite.links.db.django import admin as admin_module
-from erudite.links.db.django.models import Author, Book
+from erudite.links.db.django.models import Author, Book, BookFile
 from erudite.pacts import ReadingStatus
 
 pytestmark = pytest.mark.django_db
@@ -146,3 +146,47 @@ def test_admin_sends_a_visitor_to_the_login(client):
 def test_author_book_count_column_rejects_an_author_without_the_count():
     with pytest.raises(TypeError, match="book count"):
         admin_module.AuthorAdmin.list_display[1](Author(name="Terry Pratchett"))
+
+
+def test_admin_lists_book_files_and_finds_them_by_author(admin_client):
+    BookFile.objects.create(
+        path="/books/omens.epub",
+        content_hash="aa",
+        title="Good Omens",
+        authors=["Terry Pratchett", "Neil Gaiman"],
+    )
+    BookFile.objects.create(path="/books/dune.pdf", content_hash="bb", title="dune")
+
+    response = admin_client.get("/admin/erudite_db/bookfile/", {"q": "gaiman"})
+
+    assert response.status_code == HTTPStatus.OK
+    assert [str(file) for file in response.context["cl"].result_list] == ["Good Omens"]
+    assert "Terry Pratchett, Neil Gaiman" in response.text
+
+
+def test_admin_corrects_a_book_file_and_keeps_its_path_and_hash(admin_client):
+    file = BookFile.objects.create(
+        path="/books/scan_0042.pdf", content_hash="bb", title="scan_0042"
+    )
+
+    response = admin_client.post(
+        f"/admin/erudite_db/bookfile/{file.pk}/change/",
+        {
+            "title": "Dune",
+            "authors": '["Frank Herbert"]',
+            "isbn": "9780441172719",
+            "path": "/elsewhere.pdf",
+            "content_hash": "cc",
+        },
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == "/admin/erudite_db/bookfile/"
+    assert BookFile.objects.values().get() == {
+        "id": file.pk,
+        "path": "/books/scan_0042.pdf",
+        "content_hash": "bb",
+        "title": "Dune",
+        "authors": ["Frank Herbert"],
+        "isbn": "9780441172719",
+    }

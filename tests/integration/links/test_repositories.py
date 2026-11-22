@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import pytest
 from django.db import IntegrityError
 
-from erudite.links.db.django.models import Author, Book
-from erudite.links.db.django.repositories import BookRepository
+from erudite.links.db.django.models import Author, Book, BookFile
+from erudite.links.db.django.repositories import BookFileRepository, BookRepository
 from tests.goodreads import MORT_BOOK
 
 pytestmark = pytest.mark.django_db
@@ -68,3 +70,50 @@ def test_goodreads_ids_leave_out_books_from_elsewhere():
 
     assert books.goodreads_ids() == {386372, 34499}
     assert books.count() == 3
+
+
+MORT_FILE = {
+    "path": Path("/books/mort.epub"),
+    "content_hash": "aa",
+    "title": "Mort",
+    "authors": ["Terry Pratchett"],
+    "isbn": "0552131067",
+}
+DUNE_FILE = MORT_FILE | {
+    "path": Path("/books/dune.pdf"),
+    "content_hash": "bb",
+    "title": "dune",
+    "authors": [],
+    "isbn": "",
+}
+
+
+def test_book_files_are_stored_field_by_field():
+    BookFileRepository().create([MORT_FILE, DUNE_FILE])
+
+    assert list(BookFile.objects.values(*MORT_FILE)) == [
+        MORT_FILE | {"path": "/books/mort.epub"},
+        DUNE_FILE | {"path": "/books/dune.pdf"},
+    ]
+    assert str(BookFile.objects.first()) == "Mort"
+
+
+def test_a_content_hash_already_stored_adds_none_of_the_files():
+    files = BookFileRepository()
+    files.create([MORT_FILE])
+
+    with pytest.raises(IntegrityError):
+        files.create([DUNE_FILE, MORT_FILE])
+    assert files.paths() == {"aa": Path("/books/mort.epub")}
+
+
+def test_move_changes_the_path_of_the_file_with_that_content():
+    files = BookFileRepository()
+    files.create([MORT_FILE, DUNE_FILE])
+
+    files.move("aa", Path("/sorted/mort.epub"))
+
+    assert files.paths() == {
+        "aa": Path("/sorted/mort.epub"),
+        "bb": Path("/books/dune.pdf"),
+    }

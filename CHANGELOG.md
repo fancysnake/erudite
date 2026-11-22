@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning].
 
 ### Added
 
+- `mise run dj scan_files <directory>` records the EPUB and PDF files under a
+  directory with the metadata they carry; a second scan adds nothing and no
+  file is written to.
+- Book files show in the admin, where their details can be corrected.
 - `mise run dj import_goodreads <export.csv>` adds the books of a Goodreads
   library export; a second import leaves books already in the library unchanged.
 - Books show in the admin, where the reading status can be changed.

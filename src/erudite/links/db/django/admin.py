@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils.html import format_html_join
 from django.utils.translation import gettext_lazy as _
 
-from erudite.links.db.django.models import Author, Book, BookAuthor
+from erudite.links.db.django.models import Author, Book, BookAuthor, BookFile
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -20,11 +20,12 @@ if TYPE_CHECKING:
     # Unfold's admin classes are Django's, restyled; type-check against Django's.
     AuthorAdminBase = admin.ModelAdmin[Author]
     BookAdminBase = admin.ModelAdmin[Book]
+    BookFileAdminBase = admin.ModelAdmin[BookFile]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
 else:
     from unfold.admin import ModelAdmin, TabularInline
 
-    AuthorAdminBase = BookAdminBase = ModelAdmin
+    AuthorAdminBase = BookAdminBase = BookFileAdminBase = ModelAdmin
     BookAuthorInlineBase = TabularInline
 
 
@@ -100,3 +101,15 @@ class BookAdmin(BookAdminBase):
     @override
     def get_queryset(self, request: HttpRequest) -> QuerySet[Book]:
         return super().get_queryset(request).prefetch_related("credits__author")
+
+
+@admin.display(description=_("authors"))
+def _author_names(file: BookFile) -> str:
+    return ", ".join(file.authors)
+
+
+@admin.register(BookFile)
+class BookFileAdmin(BookFileAdminBase):
+    list_display = ("title", _author_names, "isbn", "path")
+    search_fields = ("title", "authors", "isbn", "path")
+    readonly_fields = ("path", "content_hash")
