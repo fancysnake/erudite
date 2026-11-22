@@ -43,8 +43,8 @@ scan only reads the files. Run it again after you add files: it skips the ones
 it knows, even after you rename or move them.
 
 To leave out files that are not books, add their extension, for example `png`,
-in the admin under Ignored file extensions. The next scan marks every file with
-that extension as ignored. To ignore one file, for example a ZIP archive that
+in the admin under Ignored file extensions. The next scan marks the new files
+with that extension as ignored; files it already knows keep their Ignored tick. To ignore one file, for example a ZIP archive that
 holds only images, tick Ignored on that file under Book files.
 
 ## Work on it

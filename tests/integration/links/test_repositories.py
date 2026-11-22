@@ -78,6 +78,7 @@ MORT_FILE = {
     "title": "Mort",
     "authors": ["Terry Pratchett"],
     "isbn": "0552131067",
+    "ignored": False,
 }
 DUNE_FILE = MORT_FILE | {
     "path": Path("/books/dune.pdf"),
@@ -85,6 +86,7 @@ DUNE_FILE = MORT_FILE | {
     "title": "dune",
     "authors": [],
     "isbn": "",
+    "ignored": True,
 }
 
 
@@ -119,27 +121,12 @@ def test_move_changes_the_path_of_the_file_with_that_content():
     }
 
 
-def test_files_with_an_ignored_extension_are_marked_and_the_others_are_not():
-    files = BookFileRepository()
-    cover = MORT_FILE | {"path": Path("/books/Cover.PNG"), "content_hash": "cc"}
-    files.create([MORT_FILE, DUNE_FILE, cover])
-    for extension in ("png", " .PDF", "."):
+def test_ignored_extensions_are_the_stored_extensions():
+    for extension in ("png", "pdf"):
         IgnoredExtension.objects.create(extension=extension)
 
-    files.ignore_by_extension()
-
-    assert set(BookFile.objects.values_list("content_hash", "ignored")) == {
-        ("aa", False),
-        ("bb", True),
-        ("cc", True),
-    }
-    assert str(IgnoredExtension.objects.first()) == " .PDF"
+    assert BookFileRepository().ignored_extensions() == {"png", "pdf"}
 
 
-def test_no_ignored_extension_leaves_every_file_as_it_is():
-    files = BookFileRepository()
-    files.create([MORT_FILE])
-
-    files.ignore_by_extension()
-
-    assert not BookFile.objects.get().ignored
+def test_no_ignored_extension_gives_an_empty_set():
+    assert BookFileRepository().ignored_extensions() == set()

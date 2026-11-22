@@ -82,15 +82,15 @@ def test_every_file_is_recorded_and_an_ignored_extension_marks_its_files(shelf):
     ]
 
 
-def test_an_extension_ignored_after_a_scan_marks_the_files_on_the_next_scan(shelf):
-    _run("scan_files", str(shelf))
+def test_a_later_scan_leaves_the_ignored_choice_of_a_known_file_alone(shelf):
     IgnoredExtension.objects.create(extension="pdf")
+    _run("scan_files", str(shelf))
+    BookFile.objects.filter(title="scan_0042").update(ignored=False)
+    IgnoredExtension.objects.create(extension="epub")
 
     _run("scan_files", str(shelf))
 
-    assert [str(file) for file in BookFile.objects.filter(ignored=True)] == [
-        "scan_0042"
-    ]
+    assert not BookFile.objects.filter(ignored=True).exists()
 
 
 def test_a_path_that_is_no_directory_is_an_error(tmp_path):

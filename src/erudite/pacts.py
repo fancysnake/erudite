@@ -52,10 +52,11 @@ class BookFileMetadata(TypedDict):
 class BookFileData(BookFileMetadata):
     path: Path
     content_hash: str
+    ignored: bool
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class ImportSummaryDTO:
+class SyncSummaryDTO:
     created: int
     skipped: int
 
@@ -103,22 +104,25 @@ class BookFileRepositoryProtocol(Protocol):
     def move(self, content_hash: str, path: Path) -> None:
         """Point the stored file with this content at `path`."""
 
-    def ignore_by_extension(self) -> None:
-        """Mark as ignored every stored file with an ignored extension."""
+    def ignored_extensions(self) -> set[str]:
+        """Return the extensions the user ignores: lowercase, without the dot."""
 
 
 class LibraryServiceProtocol(Protocol):
     def book_count(self) -> int: ...
 
-    def import_goodreads(self, path: Path) -> ImportSummaryDTO:
+    def import_goodreads(self, path: Path) -> SyncSummaryDTO:
         """Add the books of the export at `path` that the library does not hold."""
 
 
 class BookFilesServiceProtocol(Protocol):
-    def scan(self, directory: Path) -> ImportSummaryDTO:
+    def scan(self, directory: Path) -> SyncSummaryDTO:
         """Add the files under `directory` that are not stored.
 
-        A file with an ignored extension is stored as ignored.
+        A new file with an ignored extension is stored as ignored; a stored file
+        keeps what the user chose for it. A stored file found at a new path,
+        while its old path is gone, gets the new path. `skipped` counts every
+        file that was already stored, moved ones included.
         """
 
 

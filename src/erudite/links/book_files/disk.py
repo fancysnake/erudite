@@ -3,6 +3,7 @@
 import hashlib
 import re
 import zipfile
+import zlib
 from typing import TYPE_CHECKING, override
 
 from defusedxml import ElementTree
@@ -89,7 +90,16 @@ def _pdf(path: Path) -> BookFileMetadata:
     )
 
 
-_READERS = {".epub": _epub, ".pdf": _pdf}
+# What each parser raises for a damaged file, beyond the OSError of a failed read.
+_EPUB_ERRORS = (
+    zipfile.BadZipFile,
+    zlib.error,
+    EOFError,
+    ElementTree.ParseError,
+    DefusedXmlException,
+)
+_PDF_ERRORS = (PyPdfError, ValueError, KeyError, TypeError)
+_READERS = {".epub": (_epub, _EPUB_ERRORS), ".pdf": (_pdf, _PDF_ERRORS)}
 
 
 def _by_hash(directory: Path) -> dict[str, Path]:
@@ -116,16 +126,12 @@ class DiskBookFiles(DiskBookFilesProtocol):
 
     @override
     def read(self, path: Path) -> BookFileMetadata:
-        if (reader := _READERS.get(path.suffix.lower())) is None:
+        if (found := _READERS.get(path.suffix.lower())) is None:
             return _nothing()
+        reader, damaged = found
         try:
             return reader(path)
-        except (
-            zipfile.BadZipFile,
-            ElementTree.ParseError,
-            DefusedXmlException,
-            PyPdfError,
-        ):
+        except damaged:
             # A damaged file is still a file the user owns.
             return _nothing()
         except OSError as exc:

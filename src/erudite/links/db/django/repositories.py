@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import override
 
 from django.db import transaction
-from django.db.models import Q
 
 from erudite.links.db.django.models import (
     Author,
@@ -70,11 +69,5 @@ class BookFileRepository(BookFileRepositoryProtocol):
         BookFile.objects.filter(content_hash=content_hash).update(path=str(path))
 
     @override
-    def ignore_by_extension(self) -> None:
-        with_extension = Q()
-        for extension in IgnoredExtension.objects.values_list("extension", flat=True):
-            # The user may have typed `.PNG` for `png`.
-            if suffix := extension.strip().lstrip("."):
-                with_extension |= Q(path__iendswith=f".{suffix}")
-        if with_extension:
-            BookFile.objects.filter(with_extension).update(ignored=True)
+    def ignored_extensions(self) -> set[str]:
+        return set(IgnoredExtension.objects.values_list("extension", flat=True))

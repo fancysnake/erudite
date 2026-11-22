@@ -60,3 +60,25 @@ def write_pdf(path, *, bookmarks=(), **tags):
         )
     writer.write(path)
     return path
+
+
+def damage_epub(path, *, member="META-INF/container.xml"):
+    """Overwrite the start of one member's compressed data with an invalid block."""
+    with zipfile.ZipFile(path) as archive:
+        info = archive.getinfo(member)
+    with path.open("r+b") as file:
+        file.seek(info.header_offset + 26)
+        name_size, extra_size = int.from_bytes(file.read(2), "little"), int.from_bytes(
+            file.read(2), "little"
+        )
+        file.seek(info.header_offset + 30 + name_size + extra_size)
+        file.write(b"\xff" * 4)
+    return path
+
+
+def write_deflated_epub(path, *, title="Mort"):
+    """Write an EPUB whose members are compressed, so their data can be damaged."""
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("META-INF/container.xml", container_xml("book.opf"))
+        archive.writestr("book.opf", package_xml(title=title))
+    return path

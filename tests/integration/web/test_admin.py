@@ -214,3 +214,22 @@ def test_admin_adds_an_ignored_file_extension(admin_client):
     assert response.status_code == HTTPStatus.FOUND
     assert response.url == "/admin/erudite_db/ignoredextension/"
     assert IgnoredExtension.objects.values_list("extension", flat=True).get() == "png"
+
+
+@pytest.mark.parametrize("typed", (" .PNG ", ".png", "PNG", "png"))
+def test_admin_cleans_an_ignored_file_extension_before_it_stores_it(
+    admin_client, *, typed
+):
+    admin_client.post("/admin/erudite_db/ignoredextension/add/", {"extension": typed})
+
+    assert IgnoredExtension.objects.values_list("extension", flat=True).get() == "png"
+
+
+@pytest.mark.parametrize("typed", ("", " ", ".", " . "))
+def test_admin_rejects_an_empty_ignored_file_extension(admin_client, *, typed):
+    response = admin_client.post(
+        "/admin/erudite_db/ignoredextension/add/", {"extension": typed}
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert not IgnoredExtension.objects.exists()

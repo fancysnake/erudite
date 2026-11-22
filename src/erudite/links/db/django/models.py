@@ -1,7 +1,8 @@
 """ORM models, internal to the adapter."""
 
-from typing import ClassVar
+from typing import ClassVar, override
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -95,6 +96,13 @@ class IgnoredExtension(models.Model):
 
     def __str__(self) -> str:
         return str(self.extension)
+
+    @override
+    def clean(self) -> None:
+        # The user may type ` .PNG` for `png`; the scan compares the clean form.
+        self.extension = str(self.extension).strip().lstrip(".").strip().lower()
+        if not self.extension:
+            raise ValidationError({"extension": _("Enter an extension.")})
 
 
 class BookAuthor(models.Model):

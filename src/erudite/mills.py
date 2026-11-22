@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, override
 from erudite.pacts import (
     BookFileData,
     BookFilesServiceProtocol,
-    ImportSummaryDTO,
     LibraryServiceProtocol,
+    SyncSummaryDTO,
 )
 
 if TYPE_CHECKING:
@@ -32,14 +32,14 @@ class LibraryService(LibraryServiceProtocol):
         return self._books.count()
 
     @override
-    def import_goodreads(self, path: Path) -> ImportSummaryDTO:
+    def import_goodreads(self, path: Path) -> SyncSummaryDTO:
         # A book already in the library is left alone: its status and every
         # edit made in the app belong to the user.
         exported = {book["goodreads_id"]: book for book in self._goodreads.read(path)}
         known = self._books.goodreads_ids()
         new = [book for key, book in exported.items() if key not in known]
         self._books.create_from_goodreads(new)
-        return ImportSummaryDTO(created=len(new), skipped=len(exported) - len(new))
+        return SyncSummaryDTO(created=len(new), skipped=len(exported) - len(new))
 
 
 class BookFilesService(BookFilesServiceProtocol):
@@ -50,9 +50,10 @@ class BookFilesService(BookFilesServiceProtocol):
         self._disk = disk
 
     @override
-    def scan(self, directory: Path) -> ImportSummaryDTO:
+    def scan(self, directory: Path) -> SyncSummaryDTO:
         found = self._disk.find(directory)
         known = self._files.paths()
+        ignored = self._files.ignored_extensions()
         new: list[BookFileData] = []
         for content_hash, path in found.items():
             if content_hash not in known:
@@ -64,6 +65,7 @@ class BookFilesService(BookFilesServiceProtocol):
                         title=metadata["title"] or path.stem,
                         authors=metadata["authors"],
                         isbn=metadata["isbn"],
+                        ignored=path.suffix.lower().removeprefix(".") in ignored,
                     )
                 )
             # A copy at a second path leaves the stored path alone.
@@ -72,5 +74,4 @@ class BookFilesService(BookFilesServiceProtocol):
             ):
                 self._files.move(content_hash, path)
         self._files.create(new)
-        self._files.ignore_by_extension()
-        return ImportSummaryDTO(created=len(new), skipped=len(found) - len(new))
+        return SyncSummaryDTO(created=len(new), skipped=len(found) - len(new))

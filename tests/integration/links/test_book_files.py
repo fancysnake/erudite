@@ -9,7 +9,9 @@ from erudite.pacts import FileScanError
 from tests.book_files import (
     add_package,
     container_xml,
+    damage_epub,
     package_xml,
+    write_deflated_epub,
     write_epub,
     write_pdf,
 )
@@ -105,6 +107,29 @@ def test_an_epub_without_a_package_document_gives_nothing(tmp_path):
 def test_a_damaged_file_gives_nothing(tmp_path, *, content, suffix):
     path = tmp_path / f"mort{suffix}"
     path.write_bytes(content)
+
+    assert DiskBookFiles().read(path) == NOTHING
+
+
+@pytest.mark.parametrize("member", ("META-INF/container.xml", "book.opf"))
+def test_an_epub_with_damaged_compressed_data_gives_nothing(tmp_path, *, member):
+    path = damage_epub(write_deflated_epub(tmp_path / "mort.epub"), member=member)
+
+    assert DiskBookFiles().read(path) == NOTHING
+
+
+@pytest.mark.parametrize("keep", (20, 200, -40))
+def test_a_truncated_epub_gives_nothing(tmp_path, *, keep):
+    path = write_deflated_epub(tmp_path / "mort.epub")
+    path.write_bytes(path.read_bytes()[:keep])
+
+    assert DiskBookFiles().read(path) == NOTHING
+
+
+@pytest.mark.parametrize("keep", (20, 400, -40))
+def test_a_truncated_pdf_gives_nothing(tmp_path, *, keep):
+    path = write_pdf(tmp_path / "mort.pdf", Title="Mort", bookmarks=["Mort"])
+    path.write_bytes(path.read_bytes()[:keep])
 
     assert DiskBookFiles().read(path) == NOTHING
 
