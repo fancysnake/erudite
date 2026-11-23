@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from erudite.pacts import ReadingStatus
+from erudite.pacts import BookSource, ReadingStatus
 
 _STATUS_LABELS = {
     ReadingStatus.TO_READ: _("To read"),
@@ -15,6 +15,9 @@ _STATUS_LABELS = {
     ReadingStatus.READ: _("Read"),
     ReadingStatus.DID_NOT_FINISH: _("Did not finish"),
 }
+_STATUS_CHOICES = [(status.value, _STATUS_LABELS[status]) for status in ReadingStatus]
+_SOURCE_LABELS = {BookSource.GOODREADS: _("Goodreads"), BookSource.FILE: _("File")}
+_SOURCE_CHOICES = [(source.value, _SOURCE_LABELS[source]) for source in BookSource]
 
 
 class Author(models.Model):
@@ -29,15 +32,10 @@ class Author(models.Model):
         return str(self.name)
 
 
-class Book(models.Model):
-    # Empty for a book that did not come from Goodreads.
-    goodreads_id = models.PositiveBigIntegerField(
-        _("Goodreads id"), unique=True, null=True, blank=True
-    )
+class BookDetails(models.Model):
+    """What a book and the raw book of its source both say about the book."""
+
     title = models.CharField(_("title"), max_length=510)
-    authors = models.ManyToManyField(
-        Author, through="BookAuthor", related_name="books", verbose_name=_("authors")
-    )
     isbn10 = models.CharField(_("ISBN-10"), max_length=10, blank=True)
     isbn13 = models.CharField(_("ISBN-13"), max_length=13, blank=True)
     series = models.CharField(_("series"), max_length=255, blank=True)
@@ -48,9 +46,24 @@ class Book(models.Model):
     date_added = models.DateField(_("date added"), null=True, blank=True)
     date_read = models.DateField(_("date read"), null=True, blank=True)
     status = models.CharField(
+        _("reading status"), max_length=20, choices=_STATUS_CHOICES, blank=True
+    )
+
+    class Meta:
+        abstract = True
+
+    def __str__(self) -> str:
+        return str(self.title)
+
+
+class Book(BookDetails):
+    authors = models.ManyToManyField(
+        Author, through="BookAuthor", related_name="books", verbose_name=_("authors")
+    )
+    status = models.CharField(
         _("reading status"),
         max_length=20,
-        choices=[(status.value, _STATUS_LABELS[status]) for status in ReadingStatus],
+        choices=_STATUS_CHOICES,
         default=ReadingStatus.TO_READ.value,
     )
 
@@ -59,26 +72,35 @@ class Book(models.Model):
         verbose_name = _("book")
         verbose_name_plural = _("books")
 
-    def __str__(self) -> str:
-        return str(self.title)
 
+class RawBook(BookDetails):
+    """A book as its source gave it; only the source writes it."""
 
-class BookFile(models.Model):
-    path = models.CharField(_("path"), max_length=4096)
-    # SHA-256 of the content, in hex: the same file under a new name is known.
-    content_hash = models.CharField(_("content hash"), max_length=64, unique=True)
-    title = models.CharField(_("title"), max_length=510)
+    # Empty once the user deleted the book: the source does not add it again.
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="raw_books",
+        verbose_name=_("book"),
+    )
+    source = models.CharField(_("source"), max_length=20, choices=_SOURCE_CHOICES)
+    # The name the source has for the book: a Goodreads id, the SHA-256 of a
+    # file's content in hex, so the same file under a new name is known.
+    key = models.CharField(_("key"), max_length=64)
+    path = models.CharField(_("path"), max_length=4096, blank=True)
     authors = models.JSONField(_("authors"), default=list, blank=True)
-    isbn = models.CharField(_("ISBN"), max_length=13, blank=True)
-    ignored = models.BooleanField(_("ignored"), default=False)
 
     class Meta:
         ordering: ClassVar = ["title"]
-        verbose_name = _("book file")
-        verbose_name_plural = _("book files")
-
-    def __str__(self) -> str:
-        return str(self.title)
+        constraints: ClassVar = [
+            models.UniqueConstraint(
+                fields=["source", "key"], name="raw_book_source_key_unique"
+            )
+        ]
+        verbose_name = _("raw book")
+        verbose_name_plural = _("raw books")
 
 
 class IgnoredExtension(models.Model):

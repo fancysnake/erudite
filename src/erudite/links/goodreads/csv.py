@@ -6,9 +6,10 @@ import re
 from typing import TYPE_CHECKING, override
 
 from erudite.pacts import (
-    GoodreadsBookData,
+    BookSource,
     GoodreadsExportError,
     GoodreadsExportProtocol,
+    RawBookData,
     ReadingStatus,
 )
 
@@ -78,11 +79,12 @@ def _status(row: dict[str, str]) -> ReadingStatus:
     )
 
 
-def _book(row: dict[str, str]) -> GoodreadsBookData:
+def _book(row: dict[str, str]) -> RawBookData:
     title = _squeeze(row["Title"])
     series = _SERIES.match(title)
-    return GoodreadsBookData(
-        goodreads_id=int(row["Book Id"]),
+    return RawBookData(
+        source=BookSource.GOODREADS,
+        key=str(int(row["Book Id"])),
         title=series["title"] if series else title,
         authors=[*_split(row["Author"]), *_split(row["Additional Authors"])],
         isbn10=_isbn(row["ISBN"]),
@@ -104,7 +106,7 @@ def _rows(path: Path) -> list[list[str]]:
 
 class GoodreadsCsvExport(GoodreadsExportProtocol):
     @override
-    def read(self, path: Path) -> list[GoodreadsBookData]:
+    def read(self, path: Path) -> list[RawBookData]:
         try:
             table = _rows(path)
         except OSError as exc:
@@ -118,7 +120,7 @@ class GoodreadsCsvExport(GoodreadsExportProtocol):
             if column not in header:
                 msg = f"{path}: no {column!r} column."
                 raise GoodreadsExportError(msg)
-        books: list[GoodreadsBookData] = []
+        books: list[RawBookData] = []
         # Rows, not lines: a review may span several lines. The header is row 1.
         for number, row in enumerate(rows, start=2):
             if len(row) != len(header):

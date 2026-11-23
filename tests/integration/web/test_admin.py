@@ -4,8 +4,8 @@ from http import HTTPStatus
 import pytest
 
 from erudite.links.db.django import admin as admin_module
-from erudite.links.db.django.models import Author, Book, BookFile, IgnoredExtension
-from erudite.pacts import ReadingStatus
+from erudite.links.db.django.models import Author, Book, IgnoredExtension, RawBook
+from erudite.pacts import BookSource, ReadingStatus
 
 pytestmark = pytest.mark.django_db
 
@@ -148,62 +148,65 @@ def test_author_book_count_column_rejects_an_author_without_the_count():
         admin_module.AuthorAdmin.list_display[1](Author(name="Terry Pratchett"))
 
 
-def test_admin_lists_book_files_and_finds_them_by_author(admin_client):
-    BookFile.objects.create(
-        path="/books/omens.epub",
-        content_hash="aa",
-        title="Good Omens",
+def test_admin_filters_the_books_that_have_no_author(admin_client):
+    _book("Mort", "Terry Pratchett")
+    _book("scan_0042")
+
+    response = admin_client.get("/admin/erudite_db/book/", {"credits__isempty": "1"})
+
+    assert response.status_code == HTTPStatus.OK
+    assert [str(book) for book in response.context["cl"].result_list] == ["scan_0042"]
+
+
+def _raw_book(title, **fields):
+    return RawBook.objects.create(
+        source=BookSource.FILE, key=title, title=title, **fields
+    )
+
+
+def test_admin_lists_raw_books_and_finds_them_by_author(admin_client):
+    _raw_book(
+        "Good Omens",
         authors=["Terry Pratchett", "Neil Gaiman"],
+        path="/books/omens.epub",
+        book=_book("Good Omens (my copy)"),
     )
-    BookFile.objects.create(path="/books/dune.pdf", content_hash="bb", title="dune")
+    _raw_book("dune", path="/books/dune.pdf")
 
-    response = admin_client.get("/admin/erudite_db/bookfile/", {"q": "gaiman"})
+    response = admin_client.get("/admin/erudite_db/rawbook/", {"q": "gaiman"})
 
     assert response.status_code == HTTPStatus.OK
-    assert [str(file) for file in response.context["cl"].result_list] == ["Good Omens"]
+    assert [str(raw) for raw in response.context["cl"].result_list] == ["Good Omens"]
     assert "Terry Pratchett, Neil Gaiman" in response.text
+    assert "/books/omens.epub" in response.text
+    assert "Good Omens (my copy)" in response.text
 
 
-def test_admin_corrects_a_book_file_and_keeps_its_path_and_hash(admin_client):
-    file = BookFile.objects.create(
-        path="/books/scan_0042.pdf", content_hash="bb", title="scan_0042"
+def test_admin_filters_raw_books_by_source(admin_client):
+    _raw_book("Mort")
+    RawBook.objects.create(source=BookSource.GOODREADS, key="386372", title="Dune")
+
+    response = admin_client.get(
+        "/admin/erudite_db/rawbook/", {"source__exact": BookSource.GOODREADS}
     )
-
-    response = admin_client.post(
-        f"/admin/erudite_db/bookfile/{file.pk}/change/",
-        {
-            "title": "Dune",
-            "authors": '["Frank Herbert"]',
-            "isbn": "9780441172719",
-            "ignored": "on",
-            "path": "/elsewhere.pdf",
-            "content_hash": "cc",
-        },
-    )
-
-    assert response.status_code == HTTPStatus.FOUND
-    assert response.url == "/admin/erudite_db/bookfile/"
-    assert BookFile.objects.values().get() == {
-        "id": file.pk,
-        "path": "/books/scan_0042.pdf",
-        "content_hash": "bb",
-        "title": "Dune",
-        "authors": ["Frank Herbert"],
-        "isbn": "9780441172719",
-        "ignored": True,
-    }
-
-
-def test_admin_filters_book_files_by_ignored(admin_client):
-    BookFile.objects.create(path="/b/mort.epub", content_hash="aa", title="Mort")
-    BookFile.objects.create(
-        path="/b/scans.zip", content_hash="bb", title="scans", ignored=True
-    )
-
-    response = admin_client.get("/admin/erudite_db/bookfile/", {"ignored__exact": "1"})
 
     assert response.status_code == HTTPStatus.OK
-    assert [str(file) for file in response.context["cl"].result_list] == ["scans"]
+    assert [str(raw) for raw in response.context["cl"].result_list] == ["Dune"]
+
+
+def test_admin_shows_a_raw_book_and_neither_changes_nor_adds_one(admin_client):
+    raw = _raw_book("scan_0042", path="/books/scan_0042.pdf")
+    before = RawBook.objects.values().get()
+    url = f"/admin/erudite_db/rawbook/{raw.pk}/change/"
+
+    assert admin_client.get(url).status_code == HTTPStatus.OK
+    admin_client.post(url, {"title": "Dune", "path": "/elsewhere.pdf", "key": "cc"})
+
+    assert RawBook.objects.values().get() == before
+    assert (
+        admin_client.get("/admin/erudite_db/rawbook/add/").status_code
+        == HTTPStatus.FORBIDDEN
+    )
 
 
 def test_admin_adds_an_ignored_file_extension(admin_client):

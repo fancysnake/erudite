@@ -36,16 +36,24 @@ book that is already there, so you can run it again after each new export.
 mise run dj scan_files ~/Books
 ```
 
-The scan records every file under the directory. For an EPUB or PDF it records
-the title, authors and ISBN the file carries. A file that carries no title is
-recorded under its file name; correct it in the admin under Book files. The
-scan only reads the files. Run it again after you add files: it skips the ones
-it knows, even after you rename or move them.
+The scan adds every file under the directory as a book. For an EPUB or PDF the
+book gets the title, authors and ISBN the file carries. A file that carries no
+title becomes a book named after the file, with no author; correct it in the
+admin under Books, where the filter on authors finds the books that have none.
+The scan only reads the files. Run it again after you add files: it skips the
+ones it knows, even after you rename or move them.
 
 To leave out files that are not books, add their extension, for example `png`,
-in the admin under Ignored file extensions. The next scan marks the new files
-with that extension as ignored; files it already knows keep their Ignored tick. To ignore one file, for example a ZIP archive that
-holds only images, tick Ignored on that file under Book files.
+in the admin under Ignored file extensions. The next scan does not add new
+files with that extension; books it already added stay. To leave out one file,
+for example a ZIP archive that holds only images, delete its book: the scan
+does not add it again.
+
+## Raw books
+
+The import and the scan store what they found as a raw book, next to the book
+you see and edit. The admin lists raw books with their source and file path.
+They are read-only: your edits go to the book and the next run leaves it alone.
 
 ## Work on it
 
