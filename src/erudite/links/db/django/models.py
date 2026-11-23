@@ -16,10 +16,8 @@ _STATUS_LABELS = {
     ReadingStatus.DID_NOT_FINISH: _("Did not finish"),
 }
 _STATUS_CHOICES = [(status.value, _STATUS_LABELS[status]) for status in ReadingStatus]
-_SOURCE_CHOICES = [
-    (BookSource.GOODREADS.value, _("Goodreads")),
-    (BookSource.FILE.value, _("File")),
-]
+_SOURCE_LABELS = {BookSource.GOODREADS: _("Goodreads"), BookSource.FILE: _("File")}
+_SOURCE_CHOICES = [(source.value, _SOURCE_LABELS[source]) for source in BookSource]
 
 
 class Author(models.Model):
@@ -34,11 +32,10 @@ class Author(models.Model):
         return str(self.name)
 
 
-class Book(models.Model):
+class BookDetails(models.Model):
+    """What a book and the raw book of its source both say about the book."""
+
     title = models.CharField(_("title"), max_length=510)
-    authors = models.ManyToManyField(
-        Author, through="BookAuthor", related_name="books", verbose_name=_("authors")
-    )
     isbn10 = models.CharField(_("ISBN-10"), max_length=10, blank=True)
     isbn13 = models.CharField(_("ISBN-13"), max_length=13, blank=True)
     series = models.CharField(_("series"), max_length=255, blank=True)
@@ -48,6 +45,21 @@ class Book(models.Model):
     rating = models.PositiveSmallIntegerField(_("rating"), null=True, blank=True)
     date_added = models.DateField(_("date added"), null=True, blank=True)
     date_read = models.DateField(_("date read"), null=True, blank=True)
+    status = models.CharField(
+        _("reading status"), max_length=20, choices=_STATUS_CHOICES, blank=True
+    )
+
+    class Meta:
+        abstract = True
+
+    def __str__(self) -> str:
+        return str(self.title)
+
+
+class Book(BookDetails):
+    authors = models.ManyToManyField(
+        Author, through="BookAuthor", related_name="books", verbose_name=_("authors")
+    )
     status = models.CharField(
         _("reading status"),
         max_length=20,
@@ -60,11 +72,8 @@ class Book(models.Model):
         verbose_name = _("book")
         verbose_name_plural = _("books")
 
-    def __str__(self) -> str:
-        return str(self.title)
 
-
-class RawBook(models.Model):
+class RawBook(BookDetails):
     """A book as its source gave it; only the source writes it."""
 
     # Empty once the user deleted the book: the source does not add it again.
@@ -81,20 +90,7 @@ class RawBook(models.Model):
     # file's content in hex, so the same file under a new name is known.
     key = models.CharField(_("key"), max_length=64)
     path = models.CharField(_("path"), max_length=4096, blank=True)
-    title = models.CharField(_("title"), max_length=510)
     authors = models.JSONField(_("authors"), default=list, blank=True)
-    isbn10 = models.CharField(_("ISBN-10"), max_length=10, blank=True)
-    isbn13 = models.CharField(_("ISBN-13"), max_length=13, blank=True)
-    series = models.CharField(_("series"), max_length=255, blank=True)
-    series_position = models.CharField(
-        _("position in series"), max_length=20, blank=True
-    )
-    rating = models.PositiveSmallIntegerField(_("rating"), null=True, blank=True)
-    date_added = models.DateField(_("date added"), null=True, blank=True)
-    date_read = models.DateField(_("date read"), null=True, blank=True)
-    status = models.CharField(
-        _("reading status"), max_length=20, choices=_STATUS_CHOICES, blank=True
-    )
 
     class Meta:
         ordering: ClassVar = ["title"]
@@ -105,9 +101,6 @@ class RawBook(models.Model):
         ]
         verbose_name = _("raw book")
         verbose_name_plural = _("raw books")
-
-    def __str__(self) -> str:
-        return str(self.title)
 
 
 class IgnoredExtension(models.Model):

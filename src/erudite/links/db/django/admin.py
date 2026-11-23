@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Protocol, override, runtime_checkable
 
 from django.contrib import admin
 from django.db.models import Count
+from django.forms import fields_for_model
 from django.urls import reverse
 from django.utils.html import format_html_join
 from django.utils.translation import gettext_lazy as _
@@ -123,22 +124,7 @@ class RawBookAdmin(RawBookAdminBase):
     list_filter = ("source",)
     search_fields = ("title", "authors", "isbn10", "isbn13", "path")
     # Only a source writes a raw book; the user edits the book.
-    readonly_fields = (
-        "book",
-        "source",
-        "key",
-        "path",
-        "title",
-        "authors",
-        "isbn10",
-        "isbn13",
-        "series",
-        "series_position",
-        "rating",
-        "date_added",
-        "date_read",
-        "status",
-    )
+    readonly_fields = tuple(fields_for_model(RawBook))
 
     @override
     def has_add_permission(self, request: HttpRequest) -> bool:

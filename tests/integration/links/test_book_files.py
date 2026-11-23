@@ -16,7 +16,7 @@ from tests.book_files import (
     write_pdf,
 )
 
-NOTHING = {"title": "", "authors": [], "isbn": ""}
+NOTHING = {"title": "", "authors": [], "isbn10": "", "isbn13": ""}
 
 
 def _hash(path):
@@ -73,27 +73,28 @@ def test_an_epub_gives_its_title_authors_and_isbn(tmp_path):
     assert DiskBookFiles().read(path) == {
         "title": "Good Omens",
         "authors": ["Terry Pratchett", "Neil Gaiman"],
-        "isbn": "0552137030",
+        "isbn10": "0552137030",
+        "isbn13": "",
     }
 
 
 @pytest.mark.parametrize(
-    ("identifier", "isbn"),
+    ("identifier", "isbns"),
     (
-        ("urn:isbn:978-0-552-13106-3", "9780552131063"),
-        ("ISBN:055213106x", "055213106X"),
-        (" 978 0552131063 ", "9780552131063"),
-        ("1234567890123", ""),
-        ("urn:uuid:1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", ""),
-        ("B000FC1PJI", ""),
+        ("urn:isbn:978-0-552-13106-3", {"isbn13": "9780552131063"}),
+        ("ISBN:055213106x", {"isbn10": "055213106X"}),
+        (" 978 0552131063 ", {"isbn13": "9780552131063"}),
+        ("1234567890123", {}),
+        ("urn:uuid:1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed", {}),
+        ("B000FC1PJI", {}),
     ),
 )
 def test_an_epub_identifier_counts_only_when_it_is_an_isbn(
-    tmp_path, *, identifier, isbn
+    tmp_path, *, identifier, isbns
 ):
     path = write_epub(tmp_path / "mort.epub", identifiers=[identifier])
 
-    assert DiskBookFiles().read(path) == NOTHING | {"isbn": isbn}
+    assert DiskBookFiles().read(path) == NOTHING | isbns
 
 
 def test_an_epub_without_a_package_document_gives_nothing(tmp_path):
@@ -210,7 +211,8 @@ def test_a_pdf_gives_its_title_and_author_tags(tmp_path):
     assert DiskBookFiles().read(path) == {
         "title": "Good Omens",
         "authors": ["Terry Pratchett", "Neil Gaiman"],
-        "isbn": "",
+        "isbn10": "",
+        "isbn13": "",
     }
 
 

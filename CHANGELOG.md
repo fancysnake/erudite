@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning].
   book, with the metadata an EPUB or PDF carries; a second scan adds nothing and
   no file is written to.
 - The scan leaves out a file whose extension is on the list of ignored file
-  extensions.
+  extensions, and its summary counts those files.
 - `mise run dj import_goodreads <export.csv>` adds the books of a Goodreads
   library export; a second import leaves books already in the library unchanged.
 - The import and the scan keep what they found as a read-only raw book next to

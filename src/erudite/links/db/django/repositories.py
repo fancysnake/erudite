@@ -4,18 +4,25 @@ from pathlib import Path
 from typing import override
 
 from django.db import transaction
+from django.forms import fields_for_model
 
 from erudite.links.db.django.models import (
     Author,
     Book,
     BookAuthor,
+    BookDetails,
     IgnoredExtension,
     RawBook,
 )
-from erudite.pacts import BookRepositoryProtocol, BookSource, RawBookData
+from erudite.pacts import (
+    BookRepositoryProtocol,
+    BookSource,
+    IgnoredExtensionsProtocol,
+    RawBookData,
+)
 
-# What a raw book holds that the book made for it does not copy.
-_RAW_ONLY = {"source", "key", "path", "authors"}
+# What a raw book gives to the book made for it.
+_BOOK_FIELDS = set(fields_for_model(BookDetails))
 
 
 class BookRepository(BookRepositoryProtocol):
@@ -43,7 +50,7 @@ class BookRepository(BookRepositoryProtocol):
             )
             authors = {author.name: author for author in Author.objects.all()}
             created = Book.objects.bulk_create(
-                Book(**{k: v for k, v in book.items() if k not in _RAW_ONLY})
+                Book(**{k: v for k, v in book.items() if k in _BOOK_FIELDS})
                 for book in books
             )
             BookAuthor.objects.bulk_create(
@@ -62,6 +69,8 @@ class BookRepository(BookRepositoryProtocol):
             path=str(path)
         )
 
+
+class IgnoredExtensions(IgnoredExtensionsProtocol):
     @override
-    def ignored_extensions(self) -> set[str]:
+    def extensions(self) -> set[str]:
         return set(IgnoredExtension.objects.values_list("extension", flat=True))

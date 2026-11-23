@@ -4,7 +4,7 @@ import pytest
 from django.db import IntegrityError
 
 from erudite.links.db.django.models import Author, Book, IgnoredExtension, RawBook
-from erudite.links.db.django.repositories import BookRepository
+from erudite.links.db.django.repositories import BookRepository, IgnoredExtensions
 from erudite.pacts import BookSource, ReadingStatus
 from tests.goodreads import MORT_BOOK
 
@@ -125,8 +125,8 @@ def test_ignored_extensions_are_the_stored_extensions():
     for extension in ("png", "pdf"):
         IgnoredExtension.objects.create(extension=extension)
 
-    assert BookRepository().ignored_extensions() == {"png", "pdf"}
+    assert IgnoredExtensions().extensions() == {"png", "pdf"}
 
 
 def test_no_ignored_extension_gives_an_empty_set():
-    assert BookRepository().ignored_extensions() == set()
+    assert IgnoredExtensions().extensions() == set()

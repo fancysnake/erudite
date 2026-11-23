@@ -18,24 +18,28 @@ if TYPE_CHECKING:
     from xml.etree.ElementTree import Element
 
 _DUBLIN_CORE = "{http://purl.org/dc/elements/1.1/}"
-_ISBN = re.compile(r"97[89]\d{10}|\d{9}[\dX]")
+_ISBN10 = re.compile(r"\d{9}[\dX]")
+_ISBN13 = re.compile(r"97[89]\d{10}")
 _ISBN_PREFIX = re.compile(r"^(urn:)?isbn:", re.IGNORECASE)
 _CONTAINER = "META-INF/container.xml"
 _OCF = "{urn:oasis:names:tc:opendocument:xmlns:container}"
 
 
 def _nothing() -> BookFileMetadata:
-    return BookFileMetadata(title="", authors=[], isbn="")
+    return BookFileMetadata(title="", authors=[], isbn10="", isbn13="")
 
 
 def _squeeze(value: str | None) -> str:
     return " ".join((value or "").split())
 
 
-def _isbn(identifier: str) -> str:
-    """`urn:isbn:978-0-552-13106-3` → `9780552131063`; any other identifier → ``."""
-    digits = re.sub(r"[\s-]", "", _ISBN_PREFIX.sub("", identifier.strip())).upper()
-    return digits if _ISBN.fullmatch(digits) else ""
+def _digits(identifier: str) -> str:
+    """`urn:isbn:978-0-552-13106-3` → `9780552131063`."""
+    return re.sub(r"[\s-]", "", _ISBN_PREFIX.sub("", identifier.strip())).upper()
+
+
+def _first_match(pattern: re.Pattern[str], identifiers: list[str]) -> str:
+    return next((d for i in identifiers if pattern.fullmatch(d := _digits(i))), "")
 
 
 def _xml(archive: zipfile.ZipFile, name: str) -> Element | None:
@@ -65,10 +69,12 @@ def _epub(path: Path) -> BookFileMetadata:
         found = (_squeeze(node.text) for node in package.iter(_DUBLIN_CORE + tag))
         return [text for text in found if text]
 
+    identifiers = texts("identifier")
     return BookFileMetadata(
         title=next(iter(texts("title")), ""),
         authors=texts("creator"),
-        isbn=next((isbn for text in texts("identifier") if (isbn := _isbn(text))), ""),
+        isbn10=_first_match(_ISBN10, identifiers),
+        isbn13=_first_match(_ISBN13, identifiers),
     )
 
 
@@ -86,7 +92,8 @@ def _pdf(path: Path) -> BookFileMetadata:
     return BookFileMetadata(
         title=_pdf_title(reader),
         authors=[name for part in author.split(";") if (name := _squeeze(part))],
-        isbn="",
+        isbn10="",
+        isbn13="",
     )
 
 

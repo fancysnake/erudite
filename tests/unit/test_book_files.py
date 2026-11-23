@@ -9,8 +9,13 @@ from erudite.pacts import BookSource, SyncSummaryDTO
 SHELF = Path("/books")
 MORT_FILE = SHELF / "mort.epub"
 DUNE_FILE = SHELF / "scan_0042.pdf"
-MORT_METADATA = {"title": "Mort", "authors": ["Terry Pratchett"], "isbn": "0552131067"}
-NO_METADATA = {"title": "", "authors": [], "isbn": ""}
+MORT_METADATA = {
+    "title": "Mort",
+    "authors": ["Terry Pratchett"],
+    "isbn10": "0552131067",
+    "isbn13": "9780552131063",
+}
+NO_METADATA = {"title": "", "authors": [], "isbn10": "", "isbn13": ""}
 MORT_BOOK = {
     "source": BookSource.FILE,
     "key": "aa",
@@ -18,20 +23,22 @@ MORT_BOOK = {
     "authors": ["Terry Pratchett"],
     "path": MORT_FILE,
     "isbn10": "0552131067",
+    "isbn13": "9780552131063",
 }
 
 
 def _scanner(*, found, known=None, on_disk=(), ignored=(), metadata=None):
     books = MagicMock()
     books.file_paths.return_value = known or {}
-    books.ignored_extensions.return_value = set(ignored)
+    ignored_extensions = MagicMock()
+    ignored_extensions.extensions.return_value = set(ignored)
     disk = MagicMock()
     disk.find.return_value = found
     disk.read.side_effect = lambda path: (
         (metadata or MORT_METADATA) if path == MORT_FILE else NO_METADATA
     )
     disk.exists.side_effect = lambda path: path in on_disk
-    service = BookFilesService(books=books, disk=disk)
+    service = BookFilesService(books=books, ignored=ignored_extensions, disk=disk)
     return service, books, disk
 
 
@@ -46,16 +53,6 @@ def test_a_first_scan_adds_every_file_as_a_raw_book_with_its_metadata():
     books.move_file.assert_not_called()
 
 
-def test_an_isbn_of_thirteen_digits_is_stored_as_isbn13():
-    metadata = MORT_METADATA | {"isbn": "9780552131063"}
-    service, books, _ = _scanner(found={"aa": MORT_FILE}, metadata=metadata)
-
-    service.scan(SHELF)
-
-    expected = {k: v for k, v in MORT_BOOK.items() if k != "isbn10"}
-    books.create.assert_called_once_with([expected | {"isbn13": "9780552131063"}])
-
-
 @pytest.mark.parametrize("path", (DUNE_FILE, SHELF / "Cover.PDF"))
 def test_a_new_file_with_an_ignored_extension_is_left_out_and_not_read(path):
     service, books, disk = _scanner(
@@ -64,7 +61,7 @@ def test_a_new_file_with_an_ignored_extension_is_left_out_and_not_read(path):
 
     summary = service.scan(SHELF)
 
-    assert summary == SyncSummaryDTO(created=1, skipped=0)
+    assert summary == SyncSummaryDTO(created=1, skipped=0, ignored=1)
     books.create.assert_called_once_with([MORT_BOOK])
     disk.read.assert_called_once_with(MORT_FILE)
 
@@ -94,6 +91,8 @@ def test_a_file_that_gives_no_title_takes_its_file_name():
                 "title": "scan_0042",
                 "authors": [],
                 "path": DUNE_FILE,
+                "isbn10": "",
+                "isbn13": "",
             }
         ]
     )

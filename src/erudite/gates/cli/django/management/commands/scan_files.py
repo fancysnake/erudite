@@ -30,5 +30,6 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Files added: {summary.created}. Already known: {summary.skipped}."
+                f" Ignored: {summary.ignored}."
             )
         )

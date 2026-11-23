@@ -377,6 +377,7 @@ ignore_names = [
     "*Middleware",
     "Command",
     "Meta",
+    "abstract",
     "application",
     "constraints",
     "help",

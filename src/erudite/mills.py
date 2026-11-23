@@ -17,9 +17,8 @@ if TYPE_CHECKING:
         BookRepositoryProtocol,
         DiskBookFilesProtocol,
         GoodreadsExportProtocol,
+        IgnoredExtensionsProtocol,
     )
-
-_ISBN13_LENGTH = 13
 
 
 class LibraryService(LibraryServiceProtocol):
@@ -46,21 +45,26 @@ class LibraryService(LibraryServiceProtocol):
 
 class BookFilesService(BookFilesServiceProtocol):
     def __init__(
-        self, *, books: BookRepositoryProtocol, disk: DiskBookFilesProtocol
+        self,
+        *,
+        books: BookRepositoryProtocol,
+        ignored: IgnoredExtensionsProtocol,
+        disk: DiskBookFilesProtocol,
     ) -> None:
         self._books = books
+        self._ignored = ignored
         self._disk = disk
 
     @override
     def scan(self, directory: Path) -> SyncSummaryDTO:
         found = self._disk.find(directory)
         known = self._books.file_paths()
-        ignored = self._books.ignored_extensions()
+        ignored = self._ignored.extensions()
+        unknown = {h: p for h, p in found.items() if h not in known}
         new = [
             self._raw_book(content_hash, path)
-            for content_hash, path in found.items()
-            if content_hash not in known
-            and path.suffix.lower().removeprefix(".") not in ignored
+            for content_hash, path in unknown.items()
+            if path.suffix.lower().removeprefix(".") not in ignored
         ]
         stored = found.keys() & known.keys()
         for content_hash in stored:
@@ -70,19 +74,18 @@ class BookFilesService(BookFilesServiceProtocol):
             ):
                 self._books.move_file(content_hash, found[content_hash])
         self._books.create(new)
-        return SyncSummaryDTO(created=len(new), skipped=len(stored))
+        return SyncSummaryDTO(
+            created=len(new), skipped=len(stored), ignored=len(unknown) - len(new)
+        )
 
     def _raw_book(self, content_hash: str, path: Path) -> RawBookData:
         metadata = self._disk.read(path)
-        book = RawBookData(
+        return RawBookData(
             source=BookSource.FILE,
             key=content_hash,
             title=metadata["title"] or path.stem,
             authors=metadata["authors"],
             path=path,
+            isbn10=metadata["isbn10"],
+            isbn13=metadata["isbn13"],
         )
-        if len(isbn := metadata["isbn"]) == _ISBN13_LENGTH:
-            book["isbn13"] = isbn
-        elif isbn:
-            book["isbn10"] = isbn
-        return book

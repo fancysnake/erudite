@@ -38,7 +38,7 @@ def test_every_file_becomes_a_book_once_and_no_file_changes(shelf):
 
     output = _run("scan_files", str(shelf))
 
-    assert output == "Files added: 2. Already known: 0.\n"
+    assert output == "Files added: 2. Already known: 0. Ignored: 0.\n"
     assert list(
         RawBook.objects.values_list("source", "title", "authors", "isbn13", "path")
     ) == [
@@ -69,7 +69,7 @@ def test_a_second_scan_adds_nothing_and_keeps_what_the_user_changed(shelf):
 
     output = _run("scan_files", str(shelf))
 
-    assert output == "Files added: 0. Already known: 2.\n"
+    assert output == "Files added: 0. Already known: 2. Ignored: 0.\n"
     assert list(Book.objects.values()) == books
     assert list(RawBook.objects.values()) == raw_books
 
@@ -80,7 +80,7 @@ def test_a_book_the_user_deleted_does_not_come_back(shelf):
 
     output = _run("scan_files", str(shelf))
 
-    assert output == "Files added: 0. Already known: 2.\n"
+    assert output == "Files added: 0. Already known: 2. Ignored: 0.\n"
     assert [str(book) for book in Book.objects.all()] == ["Mort"]
     assert RawBook.objects.get(title="scan_0042").book is None
 
@@ -91,7 +91,7 @@ def test_a_renamed_file_keeps_its_raw_book_under_the_new_path(shelf):
 
     output = _run("scan_files", str(shelf))
 
-    assert output == "Files added: 0. Already known: 2.\n"
+    assert output == "Files added: 0. Already known: 2. Ignored: 0.\n"
     assert RawBook.objects.get(title="Mort").path == str(shelf / "pratchett-mort.epub")
     assert Book.objects.count() == len(["Mort", "scan_0042"])
 
@@ -103,7 +103,7 @@ def test_a_file_with_an_ignored_extension_is_not_stored(shelf):
 
     output = _run("scan_files", str(shelf))
 
-    assert output == "Files added: 3. Already known: 0.\n"
+    assert output == "Files added: 3. Already known: 0. Ignored: 1.\n"
     titles = ["Mort", "comics", "scan_0042"]
     assert [str(raw) for raw in RawBook.objects.all()] == titles
     assert [str(book) for book in Book.objects.all()] == titles
@@ -115,7 +115,7 @@ def test_a_later_scan_keeps_a_known_file_whose_extension_became_ignored(shelf):
 
     output = _run("scan_files", str(shelf))
 
-    assert output == "Files added: 0. Already known: 2.\n"
+    assert output == "Files added: 0. Already known: 2. Ignored: 0.\n"
     assert RawBook.objects.filter(title="Mort").exists()
 
 

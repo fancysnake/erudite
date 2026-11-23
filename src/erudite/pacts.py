@@ -57,13 +57,15 @@ class BookFileMetadata(TypedDict):
 
     title: str
     authors: list[str]
-    isbn: str
+    isbn10: str
+    isbn13: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SyncSummaryDTO:
     created: int
     skipped: int
+    ignored: int = 0
 
 
 class GoodreadsExportProtocol(Protocol):
@@ -86,7 +88,9 @@ class BookRepositoryProtocol(Protocol):
     def move_file(self, content_hash: str, path: Path) -> None:
         """Point the raw book of the file with this content at `path`."""
 
-    def ignored_extensions(self) -> set[str]:
+
+class IgnoredExtensionsProtocol(Protocol):
+    def extensions(self) -> set[str]:
         """Return the extensions the user ignores: lowercase, without the dot."""
 
 
@@ -119,9 +123,10 @@ class BookFilesServiceProtocol(Protocol):
     def scan(self, directory: Path) -> SyncSummaryDTO:
         """Add each file under `directory` that is not stored, as a book.
 
-        A new file with an ignored extension is left out. A stored file found at
-        a new path, while its old path is gone, gets the new path. `skipped`
-        counts every file that was already stored, moved ones included.
+        A new file with an ignored extension is left out and counted in
+        `ignored`. A stored file found at a new path, while its old path is gone,
+        gets the new path. `skipped` counts every file that was already stored,
+        moved ones included.
         """
 
 
