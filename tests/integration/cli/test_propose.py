@@ -57,8 +57,17 @@ def test_a_second_proposal_for_a_book_with_a_waiting_decision_is_skipped():
 
     output = _run(str(book.pk), "--title", "Dune Messiah")
 
-    assert output == "Skipped: a decision waits already, or nothing is new.\n"
+    assert output == "Skipped: a decision waits for the book already.\n"
     assert Decision.objects.get().proposed == {"title": "Dune"}
+
+
+def test_a_proposal_of_what_the_book_holds_already_is_skipped():
+    book = Book.objects.create(title="Dune")
+
+    output = _run(str(book.pk), "--title", "Dune")
+
+    assert output == "Skipped: nothing proposed differs from the book.\n"
+    assert not Decision.objects.exists()
 
 
 def test_a_proposal_for_a_book_the_library_does_not_hold_is_an_error():

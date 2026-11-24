@@ -3,17 +3,16 @@ from typing import TYPE_CHECKING, override
 from django.core.management.base import BaseCommand, CommandError
 
 from erudite.gates.cli.django.services import build_services
-from erudite.pacts import NotFoundError, ProposalOutcome
+from erudite.pacts import BookFieldsData, NotFoundError, ProposalOutcome
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
 
-    from erudite.pacts import BookFieldsData
-
 _MESSAGES = {
     ProposalOutcome.FILLED: "The book had none of these fields: they are filled.",
     ProposalOutcome.WAITING: "The book holds one of these fields: a decision waits.",
-    ProposalOutcome.SKIPPED: "Skipped: a decision waits already, or nothing is new.",
+    ProposalOutcome.ALREADY_WAITING: "Skipped: a decision waits for the book already.",
+    ProposalOutcome.NOTHING_NEW: "Skipped: nothing proposed differs from the book.",
 }
 
 
@@ -36,11 +35,14 @@ class Command(BaseCommand):
 
     @override
     def handle(self, *_args: str, **options: str) -> None:
-        names = ("title", "isbn10", "isbn13", "series", "series_position")
-        proposal: BookFieldsData = {name: options[name] for name in names}
-        proposal["authors"] = [
-            name.strip() for name in options["authors"].split(";") if name.strip()
-        ]
+        proposal = BookFieldsData(
+            title=options["title"],
+            authors=options["authors"].split(";"),
+            isbn10=options["isbn10"],
+            isbn13=options["isbn13"],
+            series=options["series"],
+            series_position=options["series_position"],
+        )
         try:
             outcome = build_services().classification.propose(
                 int(options["book_id"]), proposal

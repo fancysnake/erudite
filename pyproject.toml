@@ -391,6 +391,7 @@ ignore_names = [
     "autocomplete_fields",
     "extra",
     "fields",
+    "form",
     "inlines",
     "list_display",
     "list_editable",
@@ -398,6 +399,8 @@ ignore_names = [
     "model",
     "readonly_fields",
     "search_fields",
+    # A declared form field, read by the admin through `fields`
+    "accept",
     # Book columns and write-dict keys, passed as a whole and not named in code
     "authors",
     "date_added",

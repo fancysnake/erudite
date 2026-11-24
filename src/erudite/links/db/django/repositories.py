@@ -29,6 +29,22 @@ from erudite.pacts import (
 _BOOK_FIELDS = set(fields_for_model(BookDetails))
 
 
+def _credit(names: dict[int, list[str]]) -> None:
+    """Link each book to its authors in order, each once; make missing authors."""
+    # A book may name one author twice; dict keys keep the first place.
+    groups = {book_id: dict.fromkeys(group) for book_id, group in names.items()}
+    Author.objects.bulk_create(
+        (Author(name=name) for name in {n for group in groups.values() for n in group}),
+        ignore_conflicts=True,
+    )
+    authors = dict(Author.objects.values_list("name", "pk"))
+    BookAuthor.objects.bulk_create(
+        BookAuthor(book_id=book_id, author_id=authors[name], position=position)
+        for book_id, group in groups.items()
+        for position, name in enumerate(group)
+    )
+
+
 class BookRepository(BookRepositoryProtocol):
     @override
     def count(self) -> int:
@@ -45,22 +61,16 @@ class BookRepository(BookRepositoryProtocol):
 
     @override
     def create(self, books: list[RawBookData]) -> None:
-        # A book may name one author twice; dict keys keep the first place.
-        names = [list(dict.fromkeys(book["authors"])) for book in books]
         with transaction.atomic():
-            Author.objects.bulk_create(
-                (Author(name=name) for name in {n for group in names for n in group}),
-                ignore_conflicts=True,
-            )
-            authors = {author.name: author for author in Author.objects.all()}
             created = Book.objects.bulk_create(
                 Book(**{k: v for k, v in book.items() if k in _BOOK_FIELDS})
                 for book in books
             )
-            BookAuthor.objects.bulk_create(
-                BookAuthor(book=book, author=authors[name], position=position)
-                for book, group in zip(created, names, strict=True)
-                for position, name in enumerate(group)
+            _credit(
+                {
+                    book.pk: raw["authors"]
+                    for book, raw in zip(created, books, strict=True)
+                }
             )
             RawBook.objects.bulk_create(
                 RawBook(**raw | {"path": str(raw.get("path", ""))}, book=book)
@@ -73,22 +83,31 @@ class BookRepository(BookRepositoryProtocol):
             path=str(path)
         )
 
-
-def _write(book_id: int, values: BookFieldsData) -> None:
-    names = values.get("authors")
-    Book.objects.filter(pk=book_id).update(
-        **{name: value for name, value in values.items() if name != "authors"}
-    )
-    if names is not None:
-        BookAuthor.objects.filter(book_id=book_id).delete()
-        BookAuthor.objects.bulk_create(
-            BookAuthor(
-                book_id=book_id,
-                author=Author.objects.get_or_create(name=name)[0],
-                position=position,
-            )
-            for position, name in enumerate(dict.fromkeys(names))
+    @override
+    def fields(self, book_id: int) -> BookFieldsData:
+        try:
+            book = Book.objects.get(pk=book_id)
+        except Book.DoesNotExist as exc:
+            msg = f"The library has no book {book_id}."
+            raise NotFoundError(msg) from exc
+        return BookFieldsData(
+            title=book.title,
+            authors=[str(c) for c in book.credits.select_related("author")],
+            isbn10=book.isbn10,
+            isbn13=book.isbn13,
+            series=book.series,
+            series_position=book.series_position,
         )
+
+    @override
+    def fill(self, book_id: int, values: BookFieldsData) -> None:
+        with transaction.atomic():
+            Book.objects.filter(pk=book_id).update(
+                **{name: value for name, value in values.items() if name != "authors"}
+            )
+            if "authors" in values:
+                BookAuthor.objects.filter(book_id=book_id).delete()
+                _credit({book_id: values["authors"]})
 
 
 class DecisionRepository(DecisionRepositoryProtocol):
@@ -97,37 +116,8 @@ class DecisionRepository(DecisionRepositoryProtocol):
         return Decision.objects.filter(book_id=book_id).exists()
 
     @override
-    def book_fields(self, book_id: int) -> BookFieldsData:
-        try:
-            book = Book.objects.get(pk=book_id)
-        except Book.DoesNotExist as exc:
-            msg = f"The library has no book {book_id}."
-            raise NotFoundError(msg) from exc
-        return {
-            "title": book.title,
-            "authors": [str(c) for c in book.credits.select_related("author")],
-            "isbn10": book.isbn10,
-            "isbn13": book.isbn13,
-            "series": book.series,
-            "series_position": book.series_position,
-        }
-
-    @override
-    def fill(self, book_id: int, values: BookFieldsData) -> None:
-        with transaction.atomic():
-            _write(book_id, values)
-
-    @override
     def create(self, book_id: int, proposed: BookFieldsData) -> None:
         Decision.objects.create(book_id=book_id, proposed=proposed)
-
-    @override
-    def accept(self, book_id: int, names: set[str]) -> None:
-        with transaction.atomic():
-            decision = Decision.objects.get(book_id=book_id)
-            accepted = {n: v for n, v in decision.proposed.items() if n in names}
-            _write(book_id, accepted)
-            decision.delete()
 
 
 class IgnoredExtensions(IgnoredExtensionsProtocol):

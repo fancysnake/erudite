@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING, override
 
 from erudite.pacts import (
+    BOOK_FIELDS,
     BookFilesServiceProtocol,
     BookSource,
     ClassificationServiceProtocol,
@@ -96,24 +97,30 @@ class BookFilesService(BookFilesServiceProtocol):
 
 
 class ClassificationService(ClassificationServiceProtocol):
-    def __init__(self, *, decisions: DecisionRepositoryProtocol) -> None:
+    def __init__(
+        self, *, books: BookRepositoryProtocol, decisions: DecisionRepositoryProtocol
+    ) -> None:
+        self._books = books
         self._decisions = decisions
 
     @override
     def propose(self, book_id: int, proposal: BookFieldsData) -> ProposalOutcome:
         if self._decisions.exists(book_id):
-            return ProposalOutcome.SKIPPED
-        held = self._decisions.book_fields(book_id)
-        # An empty value proposes nothing; a value the book holds changes nothing.
-        new = {
-            name: value
-            for name, value in proposal.items()
-            if value and held[name] != value
-        }
+            return ProposalOutcome.ALREADY_WAITING
+        held = self._books.fields(book_id)
+        new = proposal.copy()
+        if "authors" in new:
+            # Trimmed, each name once in first place, none empty.
+            names = (name.strip() for name in new["authors"])
+            new["authors"] = list({name: None for name in names if name})
+        for name in BOOK_FIELDS:
+            # An empty value proposes nothing; a value the book holds changes nothing.
+            if name in new and (not new[name] or new[name] == held.get(name)):
+                del new[name]
         if not new:
-            return ProposalOutcome.SKIPPED
-        if any(held[name] for name in new):
+            return ProposalOutcome.NOTHING_NEW
+        if any(held.get(name) for name in new):
             self._decisions.create(book_id, new)
             return ProposalOutcome.WAITING
-        self._decisions.fill(book_id, new)
+        self._books.fill(book_id, new)
         return ProposalOutcome.FILLED

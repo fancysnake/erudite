@@ -259,6 +259,11 @@ def test_admin_lists_decisions_with_their_proposed_fields(admin_client):
     assert "Title, Authors" in response.text
 
 
+def _accept_field(response):
+    field = response.context["adminform"].form["accept"]
+    return list(field.field.choices), field.value()
+
+
 def test_admin_shows_what_the_book_has_next_to_what_is_proposed(admin_client):
     book = _book("Good <i>Omens</i>", "Terry Pratchett")
     decision = _decision(
@@ -268,30 +273,75 @@ def test_admin_shows_what_the_book_has_next_to_what_is_proposed(admin_client):
     response = admin_client.get(f"/admin/erudite_db/decision/{decision.pk}/change/")
 
     assert response.status_code == HTTPStatus.OK
-    assert (
-        '<label class="block"><input type="checkbox" name="accept" value="authors"'
-        " checked> Authors: Terry Pratchett → Terry Pratchett, Neil Gaiman</label>\n"
-        '<label class="block"><input type="checkbox" name="accept" value="isbn13"'
-        " checked> ISBN-13: — → 9780552137034</label>"
-    ) in response.text
+    assert _accept_field(response) == (
+        [
+            ("authors", "Authors: Terry Pratchett → Terry Pratchett, Neil Gaiman"),
+            ("isbn13", "ISBN-13: — → 9780552137034"),
+        ],
+        ["authors", "isbn13"],
+    )
     assert "<i>Omens</i>" not in response.text
+    assert 'name="_continue"' not in response.text
 
 
-def test_admin_writes_only_the_accepted_fields_and_removes_the_decision(admin_client):
+def test_admin_shows_a_dash_for_a_book_with_no_authors(admin_client):
+    decision = _decision(_book("scan_0042"), authors=["Frank Herbert"])
+
+    response = admin_client.get(f"/admin/erudite_db/decision/{decision.pk}/change/")
+
+    assert _accept_field(response)[0] == [("authors", "Authors: — → Frank Herbert")]
+
+
+@pytest.mark.parametrize("button", ("_save", "_continue"))
+def test_admin_writes_only_the_accepted_fields_and_removes_the_decision(
+    admin_client, button
+):
     book = _book("scan_0042", status=ReadingStatus.READING)
     decision = _decision(book, title="Dune", authors=["Frank Herbert"])
 
     response = admin_client.post(
         f"/admin/erudite_db/decision/{decision.pk}/change/",
-        {"accept": ["authors", "status"]},
+        {"accept": ["authors"], button: "1"},
+        follow=True,
     )
 
-    assert response.status_code == HTTPStatus.FOUND
-    assert response.url == "/admin/erudite_db/decision/"
+    assert response.redirect_chain == [
+        ("/admin/erudite_db/decision/", HTTPStatus.FOUND)
+    ]
+    assert [str(m) for m in response.context["messages"]] == [
+        "The accepted fields are written to “scan_0042”."
+    ]
     book.refresh_from_db()
     assert (book.title, book.status) == ("scan_0042", ReadingStatus.READING)
     assert [str(credit) for credit in book.credits.all()] == ["Frank Herbert"]
     assert not Decision.objects.exists()
+
+
+def test_admin_accepting_no_field_removes_the_decision_and_leaves_the_book(
+    admin_client,
+):
+    book = _book("scan_0042", "Frank Herbert")
+    before = Book.objects.values().get()
+    decision = _decision(book, title="Dune")
+
+    response = admin_client.post(f"/admin/erudite_db/decision/{decision.pk}/change/")
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert Book.objects.values().get() == before
+    assert not Decision.objects.exists()
+
+
+def test_admin_rejects_accepting_a_field_that_is_not_proposed(admin_client):
+    book = _book("scan_0042")
+    decision = _decision(book, title="Dune")
+
+    response = admin_client.post(
+        f"/admin/erudite_db/decision/{decision.pk}/change/", {"accept": ["status"]}
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["adminform"].form.errors["accept"]
+    assert Decision.objects.get() == decision
 
 
 def test_admin_adds_no_decision_by_hand(admin_client):

@@ -32,7 +32,9 @@ class Services(ServicesProtocol):
 
     @cached_property
     def classification(self) -> ClassificationService:
-        return ClassificationService(decisions=DecisionRepository())
+        return ClassificationService(
+            books=BookRepository(), decisions=DecisionRepository()
+        )
 
 
 class ServiceInjectionMiddleware[Response]:

@@ -154,7 +154,7 @@ def _authors(book):
 def test_the_fields_of_a_book_are_read_with_its_authors_in_order():
     BookRepository().create([GOOD_OMENS | {"isbn13": "9780552137034"}])
 
-    assert DecisionRepository().book_fields(Book.objects.get().pk) == {
+    assert BookRepository().fields(Book.objects.get().pk) == {
         "title": "Good Omens",
         "authors": ["Terry Pratchett", "Neil Gaiman"],
         "isbn10": GOOD_OMENS["isbn10"],
@@ -166,13 +166,13 @@ def test_the_fields_of_a_book_are_read_with_its_authors_in_order():
 
 def test_the_fields_of_a_book_the_library_does_not_hold_are_not_found():
     with pytest.raises(NotFoundError, match="no book 404"):
-        DecisionRepository().book_fields(404)
+        BookRepository().fields(404)
 
 
 def test_filling_a_book_writes_the_values_and_leaves_the_other_fields():
     book = _mort()
 
-    DecisionRepository().fill(book.pk, {"isbn13": "9780552131063", "series": "Death"})
+    BookRepository().fill(book.pk, {"isbn13": "9780552131063", "series": "Death"})
 
     assert list(Book.objects.values("title", "isbn13", "series", "status")) == [
         {
@@ -188,7 +188,7 @@ def test_filling_a_book_writes_the_values_and_leaves_the_other_fields():
 def test_filling_the_authors_replaces_them_in_the_given_order_each_once():
     book = _mort()
 
-    DecisionRepository().fill(
+    BookRepository().fill(
         book.pk, {"authors": ["Neil Gaiman", "Terry Pratchett", "Neil Gaiman"]}
     )
 
@@ -208,34 +208,3 @@ def test_a_decision_waits_for_its_book_only_and_one_book_holds_one():
     assert str(Decision.objects.get()) == "Mort"
     with pytest.raises(IntegrityError):
         repository.create(mort.pk, {"title": "Mort?"})
-
-
-def test_accepting_writes_only_the_chosen_proposed_fields_and_removes_the_decision():
-    book = _mort()
-    repository = DecisionRepository()
-    repository.create(
-        book.pk, {"title": "Mort!", "authors": ["Neil Gaiman"], "series": "Death"}
-    )
-
-    repository.accept(book.pk, {"authors", "series", "status"})
-
-    book.refresh_from_db()
-    assert (book.title, book.series, book.status) == (
-        "Mort",
-        "Death",
-        MORT_BOOK["status"],
-    )
-    assert _authors(book) == ["Neil Gaiman"]
-    assert not Decision.objects.exists()
-
-
-def test_accepting_no_field_removes_the_decision_and_leaves_the_book():
-    book = _mort()
-    before = Book.objects.values().get()
-    repository = DecisionRepository()
-    repository.create(book.pk, {"title": "Mort!"})
-
-    repository.accept(book.pk, set())
-
-    assert Book.objects.values().get() == before
-    assert not repository.exists(book.pk)

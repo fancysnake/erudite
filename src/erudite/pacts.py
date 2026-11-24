@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, TypedDict
 
 if TYPE_CHECKING:
     import datetime as dt
@@ -52,15 +52,36 @@ class RawBookData(TypedDict):
     status: NotRequired[ReadingStatus]
 
 
-# The fields of a book that a classification may propose, by name: `title`,
-# `isbn10`, `isbn13`, `series`, `series_position`, and `authors` as a list.
-type BookFieldsData = dict[str, str | list[str]]
+class BookFieldsData(TypedDict, total=False):
+    """The fields of a book that a classification may propose; empty is unknown."""
+
+    title: str
+    authors: list[str]
+    isbn10: str
+    isbn13: str
+    series: str
+    series_position: str
+
+
+type BookField = Literal[
+    "title", "authors", "isbn10", "isbn13", "series", "series_position"
+]
+# The keys of `BookFieldsData`, typed so a loop over them may index it.
+BOOK_FIELDS: tuple[BookField, ...] = (
+    "title",
+    "authors",
+    "isbn10",
+    "isbn13",
+    "series",
+    "series_position",
+)
 
 
 class ProposalOutcome(StrEnum):
     FILLED = "filled"
     WAITING = "waiting"
-    SKIPPED = "skipped"
+    ALREADY_WAITING = "already_waiting"
+    NOTHING_NEW = "nothing_new"
 
 
 class FileScanError(Exception):
@@ -103,12 +124,7 @@ class BookRepositoryProtocol(Protocol):
     def move_file(self, content_hash: str, path: Path) -> None:
         """Point the raw book of the file with this content at `path`."""
 
-
-class DecisionRepositoryProtocol(Protocol):
-    def exists(self, book_id: int) -> bool:
-        """Say if a decision waits for the book."""
-
-    def book_fields(self, book_id: int) -> BookFieldsData:
+    def fields(self, book_id: int) -> BookFieldsData:
         """Return every proposable field of the book; empty where it holds none.
 
         `NotFoundError` if the library has no such book.
@@ -117,11 +133,13 @@ class DecisionRepositoryProtocol(Protocol):
     def fill(self, book_id: int, values: BookFieldsData) -> None:
         """Write `values` to the book."""
 
+
+class DecisionRepositoryProtocol(Protocol):
+    def exists(self, book_id: int) -> bool:
+        """Say if a decision waits for the book."""
+
     def create(self, book_id: int, proposed: BookFieldsData) -> None:
         """Store `proposed` as the decision that waits for the book."""
-
-    def accept(self, book_id: int, names: set[str]) -> None:
-        """Write the proposed fields in `names` to the book; remove the decision."""
 
 
 class IgnoredExtensionsProtocol(Protocol):
@@ -171,7 +189,7 @@ class ClassificationServiceProtocol(Protocol):
 
         Only values that differ from the book count. They are filled when the
         book holds none of their fields; otherwise nothing is filled and they
-        wait as a decision. A book with a waiting decision is skipped.
+        wait as a decision. A book with a waiting decision is left alone.
         """
 
 
