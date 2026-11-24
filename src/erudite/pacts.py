@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, NotRequired, Protocol, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, TypedDict
 
 if TYPE_CHECKING:
     import datetime as dt
@@ -19,6 +19,10 @@ class ReadingStatus(StrEnum):
 
 class GoodreadsExportError(Exception):
     """The file cannot be read as a Goodreads library export."""
+
+
+class NotFoundError(Exception):
+    """The library does not hold what was asked for."""
 
 
 class BookSource(StrEnum):
@@ -46,6 +50,38 @@ class RawBookData(TypedDict):
     date_added: NotRequired[dt.date | None]
     date_read: NotRequired[dt.date | None]
     status: NotRequired[ReadingStatus]
+
+
+class BookFieldsData(TypedDict, total=False):
+    """The fields of a book that a classification may propose; empty is unknown."""
+
+    title: str
+    authors: list[str]
+    isbn10: str
+    isbn13: str
+    series: str
+    series_position: str
+
+
+type BookField = Literal[
+    "title", "authors", "isbn10", "isbn13", "series", "series_position"
+]
+# The keys of `BookFieldsData`, typed so a loop over them may index it.
+BOOK_FIELDS: tuple[BookField, ...] = (
+    "title",
+    "authors",
+    "isbn10",
+    "isbn13",
+    "series",
+    "series_position",
+)
+
+
+class ProposalOutcome(StrEnum):
+    FILLED = "filled"
+    WAITING = "waiting"
+    ALREADY_WAITING = "already_waiting"
+    NOTHING_NEW = "nothing_new"
 
 
 class FileScanError(Exception):
@@ -87,6 +123,23 @@ class BookRepositoryProtocol(Protocol):
 
     def move_file(self, content_hash: str, path: Path) -> None:
         """Point the raw book of the file with this content at `path`."""
+
+    def fields(self, book_id: int) -> BookFieldsData:
+        """Return every proposable field of the book; empty where it holds none.
+
+        `NotFoundError` if the library has no such book.
+        """
+
+    def fill(self, book_id: int, values: BookFieldsData) -> None:
+        """Write `values` to the book."""
+
+
+class DecisionRepositoryProtocol(Protocol):
+    def exists(self, book_id: int) -> bool:
+        """Say if a decision waits for the book."""
+
+    def create(self, book_id: int, proposed: BookFieldsData) -> None:
+        """Store `proposed` as the decision that waits for the book."""
 
 
 class IgnoredExtensionsProtocol(Protocol):
@@ -130,6 +183,16 @@ class BookFilesServiceProtocol(Protocol):
         """
 
 
+class ClassificationServiceProtocol(Protocol):
+    def propose(self, book_id: int, proposal: BookFieldsData) -> ProposalOutcome:
+        """Fill the book from `proposal`, or hold the proposal as a decision.
+
+        Only values that differ from the book count. They are filled when the
+        book holds none of their fields; otherwise nothing is filled and they
+        wait as a decision. A book with a waiting decision is left alone.
+        """
+
+
 class ServicesProtocol(Protocol):
     """The namespace gates reach services through."""
 
@@ -138,6 +201,9 @@ class ServicesProtocol(Protocol):
 
     @property
     def book_files(self) -> BookFilesServiceProtocol: ...
+
+    @property
+    def classification(self) -> ClassificationServiceProtocol: ...
 
 
 class RootRequestProtocol(Protocol):

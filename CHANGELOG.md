@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning].
 - Books show in the admin, where the reading status can be changed and a filter
   finds the books that have no author.
 - The home page counts the books in the library.
+- A proposal of details for a book fills the fields the book lacks. If the book
+  holds one of the proposed fields, nothing is filled and the proposal waits in
+  the admin as a decision, where the user accepts all fields, some or none.
+- `mise run dj propose <book id> --title … --authors …` makes such a proposal by
+  hand.
 
 ## [0.1.0] - 2026-11-21
 

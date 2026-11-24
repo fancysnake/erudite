@@ -2,26 +2,34 @@
 
 from typing import TYPE_CHECKING, Protocol, override, runtime_checkable
 
+from django import forms
 from django.contrib import admin
 from django.db.models import Count
 from django.forms import fields_for_model
 from django.urls import reverse
 from django.utils.html import format_html_join
+from django.utils.text import capfirst
+from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 
 from erudite.links.db.django.models import (
     Author,
     Book,
     BookAuthor,
+    Decision,
     IgnoredExtension,
     RawBook,
 )
+from erudite.links.db.django.repositories import BookRepository
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from django.core.files.uploadedfile import UploadedFile
     from django.db.models import QuerySet
-    from django.http import HttpRequest
+    from django.forms import CheckboxSelectMultiple as CheckboxesWidget
+    from django.http import HttpRequest, HttpResponse, QueryDict
+    from django.utils.datastructures import MultiValueDict
     from django.utils.safestring import SafeString
 
     # Unfold's admin classes are Django's, restyled; type-check against Django's.
@@ -29,12 +37,19 @@ if TYPE_CHECKING:
     BookAdminBase = admin.ModelAdmin[Book]
     RawBookAdminBase = admin.ModelAdmin[RawBook]
     IgnoredExtensionAdminBase = admin.ModelAdmin[IgnoredExtension]
+    DecisionAdminBase = admin.ModelAdmin[Decision]
+    DecisionFormBase = forms.ModelForm[Decision]
+    type Files = MultiValueDict[str, UploadedFile[bytes]]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
 else:
     from unfold.admin import ModelAdmin, TabularInline
+    from unfold.widgets import (
+        UnfoldAdminCheckboxSelectMultipleWidget as CheckboxesWidget,
+    )
 
     AuthorAdminBase = BookAdminBase = RawBookAdminBase = ModelAdmin
-    IgnoredExtensionAdminBase = ModelAdmin
+    IgnoredExtensionAdminBase = DecisionAdminBase = ModelAdmin
+    DecisionFormBase = forms.ModelForm
     BookAuthorInlineBase = TabularInline
 
 
@@ -134,3 +149,71 @@ class RawBookAdmin(RawBookAdminBase):
 @admin.register(IgnoredExtension)
 class IgnoredExtensionAdmin(IgnoredExtensionAdminBase):
     search_fields = ("extension",)
+
+
+def _label(name: str) -> str:
+    return str(capfirst(getattr(Book, name).field.verbose_name))
+
+
+def _shown(value: object) -> str:
+    return (", ".join(value) if isinstance(value, list) else str(value)) or "—"
+
+
+@admin.display(description=_("proposed fields"))
+def _proposed_fields(decision: Decision) -> str:
+    return ", ".join(_label(name) for name in decision.proposed)
+
+
+class DecisionForm(DecisionFormBase):
+    # Declared so the admin may name it; `__init__` gives it the choices.
+    accept = forms.MultipleChoiceField()
+
+    def __init__(
+        self,
+        data: QueryDict | None = None,
+        files: Files | None = None,
+        *,
+        instance: Decision,
+    ) -> None:
+        super().__init__(data, files, instance=instance)
+        held = BookRepository().fields(instance.book_id)
+        # One ticked box per proposed field: what the book has, then the proposal.
+        self.fields["accept"] = forms.MultipleChoiceField(
+            label=_("accept"),
+            required=False,
+            widget=CheckboxesWidget,
+            choices=[
+                (name, f"{_label(name)}: {_shown(held.get(name))} → {_shown(value)}")
+                for name, value in instance.proposed.items()
+            ],
+            initial=list(instance.proposed),
+        )
+
+
+@admin.register(Decision)
+class DecisionAdmin(DecisionAdminBase):
+    form = DecisionForm
+    list_display = ("book", _proposed_fields)
+    search_fields = ("book__title",)
+    fields = ("accept",)
+
+    # Only a classification makes a decision.
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    # Django calls this inside the save transaction, once the form is valid, so
+    # the accepted names are proposed ones. The decision is gone after it: the
+    # reply goes to the list.
+    @override
+    def response_change(self, request: HttpRequest, obj: Decision) -> HttpResponse:
+        accepted = obj.proposed.copy()
+        for name in obj.proposed.keys() - set(request.POST.getlist("accept")):
+            del accepted[name]
+        BookRepository().fill(obj.book_id, accepted)
+        obj.delete()
+        self.message_user(
+            request,
+            gettext("The accepted fields are written to “%(book)s”.") % {"book": obj},
+        )
+        return self.response_post_save_change(request, obj)

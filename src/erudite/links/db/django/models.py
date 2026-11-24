@@ -103,6 +103,24 @@ class RawBook(BookDetails):
         verbose_name_plural = _("raw books")
 
 
+class Decision(models.Model):
+    """Proposed values for a book, held until the user accepts or drops them."""
+
+    book = models.OneToOneField(
+        Book, on_delete=models.CASCADE, related_name="decision", verbose_name=_("book")
+    )
+    # Field name to proposed value; the authors are a list of names.
+    proposed = models.JSONField(_("proposed"))
+
+    class Meta:
+        ordering: ClassVar = ["book__title"]
+        verbose_name = _("decision")
+        verbose_name_plural = _("decisions")
+
+    def __str__(self) -> str:
+        return str(self.book)
+
+
 class IgnoredExtension(models.Model):
     extension = models.CharField(
         _("extension"),
