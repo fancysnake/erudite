@@ -21,6 +21,10 @@ class GoodreadsExportError(Exception):
     """The file cannot be read as a Goodreads library export."""
 
 
+class NotFoundError(Exception):
+    """The library does not hold what was asked for."""
+
+
 class BookSource(StrEnum):
     GOODREADS = "goodreads"
     FILE = "file"
@@ -46,6 +50,17 @@ class RawBookData(TypedDict):
     date_added: NotRequired[dt.date | None]
     date_read: NotRequired[dt.date | None]
     status: NotRequired[ReadingStatus]
+
+
+# The fields of a book that a classification may propose, by name: `title`,
+# `isbn10`, `isbn13`, `series`, `series_position`, and `authors` as a list.
+type BookFieldsData = dict[str, str | list[str]]
+
+
+class ProposalOutcome(StrEnum):
+    FILLED = "filled"
+    WAITING = "waiting"
+    SKIPPED = "skipped"
 
 
 class FileScanError(Exception):
@@ -89,6 +104,26 @@ class BookRepositoryProtocol(Protocol):
         """Point the raw book of the file with this content at `path`."""
 
 
+class DecisionRepositoryProtocol(Protocol):
+    def exists(self, book_id: int) -> bool:
+        """Say if a decision waits for the book."""
+
+    def book_fields(self, book_id: int) -> BookFieldsData:
+        """Return every proposable field of the book; empty where it holds none.
+
+        `NotFoundError` if the library has no such book.
+        """
+
+    def fill(self, book_id: int, values: BookFieldsData) -> None:
+        """Write `values` to the book."""
+
+    def create(self, book_id: int, proposed: BookFieldsData) -> None:
+        """Store `proposed` as the decision that waits for the book."""
+
+    def accept(self, book_id: int, names: set[str]) -> None:
+        """Write the proposed fields in `names` to the book; remove the decision."""
+
+
 class IgnoredExtensionsProtocol(Protocol):
     def extensions(self) -> set[str]:
         """Return the extensions the user ignores: lowercase, without the dot."""
@@ -130,6 +165,16 @@ class BookFilesServiceProtocol(Protocol):
         """
 
 
+class ClassificationServiceProtocol(Protocol):
+    def propose(self, book_id: int, proposal: BookFieldsData) -> ProposalOutcome:
+        """Fill the book from `proposal`, or hold the proposal as a decision.
+
+        Only values that differ from the book count. They are filled when the
+        book holds none of their fields; otherwise nothing is filled and they
+        wait as a decision. A book with a waiting decision is skipped.
+        """
+
+
 class ServicesProtocol(Protocol):
     """The namespace gates reach services through."""
 
@@ -138,6 +183,9 @@ class ServicesProtocol(Protocol):
 
     @property
     def book_files(self) -> BookFilesServiceProtocol: ...
+
+    @property
+    def classification(self) -> ClassificationServiceProtocol: ...
 
 
 class RootRequestProtocol(Protocol):

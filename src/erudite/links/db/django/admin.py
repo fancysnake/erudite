@@ -13,15 +13,17 @@ from erudite.links.db.django.models import (
     Author,
     Book,
     BookAuthor,
+    Decision,
     IgnoredExtension,
     RawBook,
 )
+from erudite.links.db.django.repositories import DecisionRepository
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from django.db.models import QuerySet
-    from django.http import HttpRequest
+    from django.http import HttpRequest, HttpResponse
     from django.utils.safestring import SafeString
 
     # Unfold's admin classes are Django's, restyled; type-check against Django's.
@@ -29,12 +31,13 @@ if TYPE_CHECKING:
     BookAdminBase = admin.ModelAdmin[Book]
     RawBookAdminBase = admin.ModelAdmin[RawBook]
     IgnoredExtensionAdminBase = admin.ModelAdmin[IgnoredExtension]
+    DecisionAdminBase = admin.ModelAdmin[Decision]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
 else:
     from unfold.admin import ModelAdmin, TabularInline
 
     AuthorAdminBase = BookAdminBase = RawBookAdminBase = ModelAdmin
-    IgnoredExtensionAdminBase = ModelAdmin
+    IgnoredExtensionAdminBase = DecisionAdminBase = ModelAdmin
     BookAuthorInlineBase = TabularInline
 
 
@@ -134,3 +137,52 @@ class RawBookAdmin(RawBookAdminBase):
 @admin.register(IgnoredExtension)
 class IgnoredExtensionAdmin(IgnoredExtensionAdminBase):
     search_fields = ("extension",)
+
+
+def _label(name: str) -> str:
+    return str(fields_for_model(Book, fields=[name])[name].label)
+
+
+def _shown(value: str | list[str]) -> str:
+    return ", ".join(value) if isinstance(value, list) else str(value or "—")
+
+
+@admin.display(description=_("proposed fields"))
+def _proposed_fields(decision: Decision) -> str:
+    return ", ".join(_label(name) for name in decision.proposed)
+
+
+@admin.register(Decision)
+class DecisionAdmin(DecisionAdminBase):
+    list_display = ("book", _proposed_fields)
+    search_fields = ("book__title",)
+
+    # The form options take a field by name only, so the boxes are a method.
+    @staticmethod
+    @admin.display(description=_("accept"))
+    def differences(decision: Decision) -> SafeString:
+        """One ticked box per proposed field: what the book has, then the proposal."""
+        held = DecisionRepository().book_fields(decision.book_id)
+        return format_html_join(
+            "\n",
+            '<label class="block"><input type="checkbox" name="accept" value="{}"'
+            " checked> {}: {} → {}</label>",
+            (
+                (name, _label(name), _shown(held[name]), _shown(value))
+                for name, value in decision.proposed.items()
+            ),
+        )
+
+    fields = (differences.__name__,)
+    readonly_fields = (differences.__name__,)
+
+    # Only a classification makes a decision.
+    @override
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    @override
+    def response_change(self, request: HttpRequest, obj: Decision) -> HttpResponse:
+        # The boxes are not form fields; the repository drops a name not proposed.
+        DecisionRepository().accept(obj.book_id, set(request.POST.getlist("accept")))
+        return super().response_change(request, obj)

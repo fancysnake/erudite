@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING, override
 from erudite.pacts import (
     BookFilesServiceProtocol,
     BookSource,
+    ClassificationServiceProtocol,
     LibraryServiceProtocol,
+    ProposalOutcome,
     RawBookData,
     SyncSummaryDTO,
 )
@@ -14,7 +16,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from erudite.pacts import (
+        BookFieldsData,
         BookRepositoryProtocol,
+        DecisionRepositoryProtocol,
         DiskBookFilesProtocol,
         GoodreadsExportProtocol,
         IgnoredExtensionsProtocol,
@@ -89,3 +93,27 @@ class BookFilesService(BookFilesServiceProtocol):
             isbn10=metadata["isbn10"],
             isbn13=metadata["isbn13"],
         )
+
+
+class ClassificationService(ClassificationServiceProtocol):
+    def __init__(self, *, decisions: DecisionRepositoryProtocol) -> None:
+        self._decisions = decisions
+
+    @override
+    def propose(self, book_id: int, proposal: BookFieldsData) -> ProposalOutcome:
+        if self._decisions.exists(book_id):
+            return ProposalOutcome.SKIPPED
+        held = self._decisions.book_fields(book_id)
+        # An empty value proposes nothing; a value the book holds changes nothing.
+        new = {
+            name: value
+            for name, value in proposal.items()
+            if value and held[name] != value
+        }
+        if not new:
+            return ProposalOutcome.SKIPPED
+        if any(held[name] for name in new):
+            self._decisions.create(book_id, new)
+            return ProposalOutcome.WAITING
+        self._decisions.fill(book_id, new)
+        return ProposalOutcome.FILLED

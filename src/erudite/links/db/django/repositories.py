@@ -11,13 +11,17 @@ from erudite.links.db.django.models import (
     Book,
     BookAuthor,
     BookDetails,
+    Decision,
     IgnoredExtension,
     RawBook,
 )
 from erudite.pacts import (
+    BookFieldsData,
     BookRepositoryProtocol,
     BookSource,
+    DecisionRepositoryProtocol,
     IgnoredExtensionsProtocol,
+    NotFoundError,
     RawBookData,
 )
 
@@ -68,6 +72,62 @@ class BookRepository(BookRepositoryProtocol):
         RawBook.objects.filter(source=BookSource.FILE, key=content_hash).update(
             path=str(path)
         )
+
+
+def _write(book_id: int, values: BookFieldsData) -> None:
+    names = values.get("authors")
+    Book.objects.filter(pk=book_id).update(
+        **{name: value for name, value in values.items() if name != "authors"}
+    )
+    if names is not None:
+        BookAuthor.objects.filter(book_id=book_id).delete()
+        BookAuthor.objects.bulk_create(
+            BookAuthor(
+                book_id=book_id,
+                author=Author.objects.get_or_create(name=name)[0],
+                position=position,
+            )
+            for position, name in enumerate(dict.fromkeys(names))
+        )
+
+
+class DecisionRepository(DecisionRepositoryProtocol):
+    @override
+    def exists(self, book_id: int) -> bool:
+        return Decision.objects.filter(book_id=book_id).exists()
+
+    @override
+    def book_fields(self, book_id: int) -> BookFieldsData:
+        try:
+            book = Book.objects.get(pk=book_id)
+        except Book.DoesNotExist as exc:
+            msg = f"The library has no book {book_id}."
+            raise NotFoundError(msg) from exc
+        return {
+            "title": book.title,
+            "authors": [str(c) for c in book.credits.select_related("author")],
+            "isbn10": book.isbn10,
+            "isbn13": book.isbn13,
+            "series": book.series,
+            "series_position": book.series_position,
+        }
+
+    @override
+    def fill(self, book_id: int, values: BookFieldsData) -> None:
+        with transaction.atomic():
+            _write(book_id, values)
+
+    @override
+    def create(self, book_id: int, proposed: BookFieldsData) -> None:
+        Decision.objects.create(book_id=book_id, proposed=proposed)
+
+    @override
+    def accept(self, book_id: int, names: set[str]) -> None:
+        with transaction.atomic():
+            decision = Decision.objects.get(book_id=book_id)
+            accepted = {n: v for n, v in decision.proposed.items() if n in names}
+            _write(book_id, accepted)
+            decision.delete()
 
 
 class IgnoredExtensions(IgnoredExtensionsProtocol):
