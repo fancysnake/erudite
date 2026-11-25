@@ -10,7 +10,13 @@ from erudite.links.db.django.repositories import (
     IgnoredExtensions,
 )
 from erudite.links.goodreads.csv import GoodreadsCsvExport
-from erudite.mills import BookFilesService, ClassificationService, LibraryService
+from erudite.links.open_library.http import OpenLibraryHttp
+from erudite.mills import (
+    BookFilesService,
+    ClassificationService,
+    LibraryService,
+    WorkService,
+)
 from erudite.pacts import RootRequestProtocol, ServicesProtocol
 
 if TYPE_CHECKING:
@@ -35,6 +41,10 @@ class Services(ServicesProtocol):
         return ClassificationService(
             books=BookRepository(), decisions=DecisionRepository()
         )
+
+    @cached_property
+    def works(self) -> WorkService:
+        return WorkService(books=BookRepository(), open_library=OpenLibraryHttp())
 
 
 class ServiceInjectionMiddleware[Response]:

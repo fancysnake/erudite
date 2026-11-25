@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import override
 
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.forms import fields_for_model
 
@@ -22,6 +23,7 @@ from erudite.pacts import (
     DecisionRepositoryProtocol,
     IgnoredExtensionsProtocol,
     NotFoundError,
+    PickedWorkData,
     RawBookData,
 )
 
@@ -43,6 +45,14 @@ def _credit(names: dict[int, list[str]]) -> None:
         for book_id, group in groups.items()
         for position, name in enumerate(group)
     )
+
+
+def _book(book_id: int) -> Book:
+    try:
+        return Book.objects.get(pk=book_id)
+    except Book.DoesNotExist as exc:
+        msg = f"The library has no book {book_id}."
+        raise NotFoundError(msg) from exc
 
 
 class BookRepository(BookRepositoryProtocol):
@@ -85,11 +95,7 @@ class BookRepository(BookRepositoryProtocol):
 
     @override
     def fields(self, book_id: int) -> BookFieldsData:
-        try:
-            book = Book.objects.get(pk=book_id)
-        except Book.DoesNotExist as exc:
-            msg = f"The library has no book {book_id}."
-            raise NotFoundError(msg) from exc
+        book = _book(book_id)
         return BookFieldsData(
             title=book.title,
             authors=[str(c) for c in book.credits.select_related("author")],
@@ -108,6 +114,24 @@ class BookRepository(BookRepositoryProtocol):
             if "authors" in values:
                 BookAuthor.objects.filter(book_id=book_id).delete()
                 _credit({book_id: values["authors"]})
+
+    @override
+    def set_work(self, book_id: int, work: PickedWorkData) -> None:
+        with transaction.atomic():
+            book = _book(book_id)
+            book.open_library_work = work["work_id"]
+            book.title = work["title"] or book.title
+            book.description = work["description"] or book.description
+            if work["cover"] is not None:
+                # The storage never overwrites: without this the old image stays.
+                book.cover.delete(save=False)
+                book.cover.save(
+                    f"{book_id}.jpg", ContentFile(work["cover"]), save=False
+                )
+            book.save()
+            if work["authors"]:
+                BookAuthor.objects.filter(book_id=book_id).delete()
+                _credit({book_id: work["authors"]})
 
 
 class DecisionRepository(DecisionRepositoryProtocol):

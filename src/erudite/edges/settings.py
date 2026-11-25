@@ -13,6 +13,7 @@ env = environ.Env(
     DATABASE_URL=str,
     DEBUG=(bool, False),
     LANGUAGE_CODE=(str, "en"),
+    MEDIA_ROOT=(str, "media"),
     SECRET_KEY=str,
     STATIC_ROOT=(str, "staticfiles"),
     TIME_ZONE=(str, "Europe/Warsaw"),
@@ -96,6 +97,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = env("STATIC_ROOT")
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# Cover images of books.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = env("MEDIA_ROOT")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -1,0 +1,8 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+{% block object-tools-items %}
+  {{ block.super }}
+  {% url 'open_library' original.pk as link %}
+  {% translate "Find on Open Library" as title %}
+  {% include "unfold/helpers/tab_action.html" with title=title link=link icon="search" %}
+{% endblock object-tools-items %}

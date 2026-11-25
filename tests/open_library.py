@@ -1,0 +1,70 @@
+import json
+from io import BytesIO
+from urllib.parse import parse_qs, urlsplit
+
+from erudite.pacts import WorkDTO
+
+FOX_ID = "OL45804W"
+FOX = {
+    "key": f"/works/{FOX_ID}",
+    "title": "Fantastic Mr Fox",
+    "author_name": ["Roald Dahl"],
+    "first_publish_year": 1970,
+    "cover_i": 6498519,
+    "edition_count": 161,
+}
+# A work that has only what every work has.
+BARE_ID = "OL1W"
+BARE = {"key": f"/works/{BARE_ID}", "title": "Untitled", "edition_count": 1}
+COVER = b"a JPEG"
+# `FOX` and `BARE` as the client gives them.
+FOX_WORK = WorkDTO(
+    work_id=FOX_ID,
+    title="Fantastic Mr Fox",
+    authors=("Roald Dahl",),
+    first_year=1970,
+    cover_id=6498519,
+    edition_count=161,
+)
+BARE_WORK = WorkDTO(
+    work_id=BARE_ID,
+    title="Untitled",
+    authors=(),
+    first_year=None,
+    cover_id=None,
+    edition_count=1,
+)
+
+
+class FakeOpenLibrary:
+    """Stands in for `urlopen`: answers by path and keeps every request.
+
+    `searches` maps a query to the works found for it; `work` is the record of
+    every work; `error` is raised in place of an answer.
+    """
+
+    def __init__(self):
+        self.searches = {}
+        self.work = {"description": "A fox outwits three farmers."}
+        self.error = None
+        self.requests = []
+
+    @property
+    def queries(self):
+        return [
+            parse_qs(urlsplit(request.full_url).query)["q"][0]
+            for request in self.requests
+            if "/search.json" in request.full_url
+        ]
+
+    def __call__(self, request, timeout):
+        self.requests.append(request)
+        if self.error:
+            raise self.error
+        url = urlsplit(request.full_url)
+        if url.path == "/search.json":
+            docs = self.searches.get(parse_qs(url.query)["q"][0], [])
+            return BytesIO(json.dumps({"docs": docs}).encode())
+        if url.path.startswith("/works/"):
+            return BytesIO(json.dumps(self.work).encode())
+        return BytesIO(COVER)

@@ -1,0 +1,91 @@
+import time
+from unittest.mock import MagicMock
+from urllib.error import URLError
+from urllib.parse import parse_qs, urlsplit
+
+import pytest
+
+from erudite.links.open_library.http import OpenLibraryHttp
+from erudite.pacts import OpenLibraryError
+from tests.open_library import BARE, BARE_WORK, COVER, FOX, FOX_ID, FOX_WORK
+
+
+def test_a_search_gives_the_works_found_best_first(open_library):
+    open_library.searches = {"fantastic fox": [FOX, BARE]}
+
+    works = OpenLibraryHttp().search("fantastic fox")
+
+    assert works == [FOX_WORK, BARE_WORK]
+
+
+def test_a_search_sends_the_query_and_no_contact_detail(open_library):
+    OpenLibraryHttp().search("fantastic fox")
+
+    (request,) = open_library.requests
+    url = urlsplit(request.full_url)
+    assert (url.scheme, url.netloc, url.path) == (
+        "https",
+        "openlibrary.org",
+        "/search.json",
+    )
+    assert parse_qs(url.query) == {
+        "q": ["fantastic fox"],
+        "limit": ["10"],
+        "fields": ["key,title,author_name,first_publish_year,cover_i,edition_count"],
+    }
+    assert request.header_items() == [("User-agent", "erudite")]
+
+
+@pytest.mark.parametrize(
+    ("work", "description"),
+    (
+        ({"description": "A fox."}, "A fox."),
+        ({"description": {"type": "/type/text", "value": "A fox."}}, "A fox."),
+        ({}, ""),
+    ),
+)
+def test_the_description_of_a_work_is_its_text(open_library, *, work, description):
+    open_library.work = work
+
+    assert OpenLibraryHttp().description(FOX_ID) == description
+    (request,) = open_library.requests
+    assert request.full_url == f"https://openlibrary.org/works/{FOX_ID}.json"
+
+
+def test_a_cover_is_the_large_image(open_library):
+    assert OpenLibraryHttp().cover(6498519) == COVER
+    (request,) = open_library.requests
+    assert request.full_url == "https://covers.openlibrary.org/b/id/6498519-L.jpg"
+
+
+def test_no_answer_from_open_library_is_an_error(open_library):
+    open_library.error = URLError("timed out")
+
+    with pytest.raises(OpenLibraryError, match="gave no answer"):
+        OpenLibraryHttp().search("fox")
+
+
+@pytest.mark.parametrize(
+    ("answer", "message"), ((b"<html>", "not JSON"), (b"[]", "unknown shape"))
+)
+def test_an_answer_that_cannot_be_read_is_an_error(monkeypatch, *, answer, message):
+    client = OpenLibraryHttp()
+    monkeypatch.setattr(client, "_get", MagicMock(return_value=answer))
+
+    with pytest.raises(OpenLibraryError, match=message):
+        client.search("fox")
+
+
+def test_a_request_waits_until_the_interval_passed_since_the_last(
+    open_library, monkeypatch
+):
+    interval = 0.2
+    monkeypatch.setattr(OpenLibraryHttp, "interval", interval)
+    client = OpenLibraryHttp()
+    client.cover(1)
+    first = time.monotonic()
+
+    client.cover(2)
+
+    assert time.monotonic() - first >= interval * 0.9
+    assert len(open_library.requests) == 2

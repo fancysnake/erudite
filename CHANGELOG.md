@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning].
 
 ### Added
 
+- "Find on Open Library" on a book in the admin, and as an action on selected
+  books, opens a page that searches Open Library with text the user can change.
+  One pick gives the book the title, authors, description and cover of the
+  work, and keeps the id of the work. Selected books come one after another,
+  each with a skip. Nothing is saved before a pick, and an ISBN is never written.
 - `mise run dj scan_files <directory>` adds every file under a directory as a
   book, with the metadata an EPUB or PDF carries; a second scan adds nothing and
   no file is written to.

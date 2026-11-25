@@ -348,3 +348,34 @@ def test_admin_adds_no_decision_by_hand(admin_client):
     response = admin_client.get("/admin/erudite_db/decision/add/")
 
     assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.parametrize(
+    ("titles", "target"),
+    (
+        (("Dune", "Mort", "Sourcery"), "/books/{0}/open-library/?queue={1}%2C{2}"),
+        (("Dune",), "/books/{0}/open-library/"),
+    ),
+)
+def test_admin_sends_the_selected_books_to_the_open_library_picker(
+    admin_client, *, titles, target
+):
+    books = [_book(title).pk for title in titles]
+
+    response = admin_client.post(
+        "/admin/erudite_db/book/",
+        {"action": "_find_on_open_library", "_selected_action": books},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == target.format(*books)
+
+
+def test_admin_links_a_book_to_its_open_library_picker(admin_client):
+    book = _book("Dune", "Frank Herbert")
+
+    response = admin_client.get(f"/admin/erudite_db/book/{book.pk}/change/")
+
+    assert response.status_code == HTTPStatus.OK
+    assert f'href="/books/{book.pk}/open-library/"' in response.text
+    assert "Find on Open Library" in response.text

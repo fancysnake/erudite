@@ -66,6 +66,12 @@ class Book(BookDetails):
         choices=_STATUS_CHOICES,
         default=ReadingStatus.TO_READ.value,
     )
+    description = models.TextField(_("description"), blank=True)
+    cover = models.FileField(_("cover"), upload_to="covers/", blank=True)
+    # The id Open Library has for the work, like OL45804W: all editions share it.
+    open_library_work = models.CharField(
+        _("Open Library work"), max_length=20, blank=True
+    )
 
     class Meta:
         ordering: ClassVar = ["title"]

@@ -1,0 +1,72 @@
+{% extends "erudite/base.html" %}
+{% load i18n %}
+{% block title %}
+  {% translate "Find on Open Library" %}
+{% endblock title %}
+{% block content %}
+  <h1>{% translate "Find on Open Library" %}</h1>
+  {% if candidates %}
+    <p>
+      {% if candidates.authors %}
+        {% blocktranslate with title=candidates.title authors=candidates.authors|join:", " trimmed %}
+          The library holds this book as “{{ title }}” by {{ authors }}.
+        {% endblocktranslate %}
+      {% else %}
+        {% blocktranslate with title=candidates.title trimmed %}
+          The library holds this book as “{{ title }}”, with no author.
+        {% endblocktranslate %}
+      {% endif %}
+    </p>
+    <form class="work-search" method="get">
+      <label for="work-search-q">{% translate "Search for" %}</label>
+      <input id="work-search-q"
+             type="search"
+             name="q"
+             value="{{ candidates.query }}">
+      {% if queue %}<input type="hidden" name="queue" value="{{ queue }}">{% endif %}
+      <button type="submit">{% translate "Search" %}</button>
+    </form>
+    <ul class="works">
+      {% for work in candidates.works %}
+        <li class="work">
+          {% if work.cover_id %}
+            <img class="work__cover"
+                 src="https://covers.openlibrary.org/b/id/{{ work.cover_id }}-M.jpg"
+                 alt=""
+                 width="90"
+                 height="135"
+                 loading="lazy">
+          {% else %}
+            <span class="work__cover">{% translate "No cover" %}</span>
+          {% endif %}
+          <div>
+            <strong>{{ work.title }}</strong>
+            <br>
+            {{ work.authors|join:", " }}
+            <br>
+            {% if work.first_year %}
+              {% blocktranslate with year=work.first_year trimmed %}
+                First published in {{ year }}.
+              {% endblocktranslate %}
+            {% endif %}
+            {% blocktranslate count counter=work.edition_count trimmed %}
+              {{ counter }} edition.
+            {% plural %}
+              {{ counter }} editions.
+            {% endblocktranslate %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="work" value="{{ work.work_id }}">
+              <button type="submit">{% translate "Pick this work" %}</button>
+            </form>
+          </div>
+        </li>
+      {% empty %}
+        <li>{% translate "Open Library found no work. Change the search." %}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  <p>
+    <a href="{{ after }}">{% translate "Skip this book" %}</a>
+  </p>
+{% endblock content %}

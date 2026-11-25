@@ -208,3 +208,53 @@ def test_a_decision_waits_for_its_book_only_and_one_book_holds_one():
     assert str(Decision.objects.get()) == "Mort"
     with pytest.raises(IntegrityError):
         repository.create(mort.pk, {"title": "Mort?"})
+
+
+def _picked(**values):
+    return {
+        "work_id": "OL45804W",
+        "title": "Fantastic Mr Fox",
+        "authors": ["Roald Dahl"],
+        "description": "A fox outwits three farmers.",
+        "cover": b"a JPEG",
+    } | values
+
+
+@pytest.mark.usefixtures("media")
+def test_a_picked_work_replaces_the_title_authors_description_and_cover():
+    BookRepository().create([MORT_BOOK])
+    book = Book.objects.get()
+    BookRepository().set_work(book.pk, _picked(cover=b"an old JPEG"))
+
+    BookRepository().set_work(book.pk, _picked())
+
+    book.refresh_from_db()
+    assert book.title == "Fantastic Mr Fox"
+    assert [str(credit) for credit in book.credits.all()] == ["Roald Dahl"]
+    assert book.description == "A fox outwits three farmers."
+    assert book.open_library_work == "OL45804W"
+    assert book.cover.name == f"covers/{book.pk}.jpg"
+    assert book.cover.read() == b"a JPEG"
+    assert book.isbn13 == MORT_BOOK["isbn13"]
+
+
+@pytest.mark.usefixtures("media")
+def test_a_picked_work_changes_nothing_where_it_holds_nothing():
+    BookRepository().create([MORT_BOOK])
+    book = Book.objects.get()
+    BookRepository().set_work(book.pk, _picked())
+
+    BookRepository().set_work(
+        book.pk, _picked(title="", authors=[], description="", cover=None)
+    )
+
+    book.refresh_from_db()
+    assert book.title == "Fantastic Mr Fox"
+    assert [str(credit) for credit in book.credits.all()] == ["Roald Dahl"]
+    assert book.description == "A fox outwits three farmers."
+    assert book.cover.read() == b"a JPEG"
+
+
+def test_a_picked_work_for_a_book_the_library_lacks_is_not_found():
+    with pytest.raises(NotFoundError, match="no book 404"):
+        BookRepository().set_work(404, _picked())

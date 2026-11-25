@@ -25,6 +25,10 @@ class NotFoundError(Exception):
     """The library does not hold what was asked for."""
 
 
+class OpenLibraryError(Exception):
+    """Open Library gave no answer, or one that cannot be read."""
+
+
 class BookSource(StrEnum):
     GOODREADS = "goodreads"
     FILE = "file"
@@ -104,6 +108,52 @@ class SyncSummaryDTO:
     ignored: int = 0
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class WorkDTO:
+    """A work at Open Library: one for all its editions. `work_id` is like OL45804W."""
+
+    work_id: str
+    title: str
+    authors: tuple[str, ...]
+    first_year: int | None
+    cover_id: int | None
+    edition_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CandidatesDTO:
+    """A book as the library holds it, and the works a search found for it."""
+
+    book_id: int
+    title: str
+    authors: tuple[str, ...]
+    query: str
+    works: tuple[WorkDTO, ...]
+
+
+class PickedWorkData(TypedDict):
+    """What the work the user picked gives its book; empty where it has none."""
+
+    work_id: str
+    title: str
+    authors: list[str]
+    description: str
+    cover: bytes | None
+
+
+class OpenLibraryProtocol(Protocol):
+    """Every method raises `OpenLibraryError` when Open Library cannot be read."""
+
+    def search(self, query: str) -> list[WorkDTO]:
+        """Return the first works Open Library finds for `query`, best first."""
+
+    def description(self, work_id: str) -> str:
+        """Return the description of the work; empty if it has none."""
+
+    def cover(self, cover_id: int) -> bytes:
+        """Return the cover image, a JPEG."""
+
+
 class GoodreadsExportProtocol(Protocol):
     def read(self, path: Path) -> list[RawBookData]:
         """Every book in the export at `path`; `GoodreadsExportError` if unreadable."""
@@ -132,6 +182,12 @@ class BookRepositoryProtocol(Protocol):
 
     def fill(self, book_id: int, values: BookFieldsData) -> None:
         """Write `values` to the book."""
+
+    def set_work(self, book_id: int, work: PickedWorkData) -> None:
+        """Write the picked work to the book; an empty value changes nothing.
+
+        `NotFoundError` if the library has no such book.
+        """
 
 
 class DecisionRepositoryProtocol(Protocol):
@@ -193,6 +249,23 @@ class ClassificationServiceProtocol(Protocol):
         """
 
 
+class WorkServiceProtocol(Protocol):
+    def candidates(self, book_id: int, query: str | None = None) -> CandidatesDTO:
+        """Search Open Library for the works the book may be.
+
+        Without `query` the search is for the title and authors of the book, and
+        the work of an ISBN the book holds comes first. `NotFoundError` if the
+        library has no such book; `OpenLibraryError` if the search fails.
+        """
+
+    def pick(self, book_id: int, work_id: str) -> None:
+        """Give the book the title, authors, description and cover of the work.
+
+        `NotFoundError` if the library has no such book or Open Library no such
+        work; `OpenLibraryError` if the work cannot be read.
+        """
+
+
 class ServicesProtocol(Protocol):
     """The namespace gates reach services through."""
 
@@ -204,6 +277,9 @@ class ServicesProtocol(Protocol):
 
     @property
     def classification(self) -> ClassificationServiceProtocol: ...
+
+    @property
+    def works(self) -> WorkServiceProtocol: ...
 
 
 class RootRequestProtocol(Protocol):

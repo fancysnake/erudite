@@ -227,3 +227,4 @@ __marimo__/
 mise.local.toml
 .mise.local.toml
 staticfiles/
+media/

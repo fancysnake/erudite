@@ -13,6 +13,7 @@
       <a class="site-header__name" href="{% url 'home' %}">erudite</a>
     </header>
     <main class="site-main">
+      {% for message in messages %}<p class="message message--{{ message.level_tag }}">{{ message }}</p>{% endfor %}
       {% block content %}
       {% endblock content %}
     </main>
