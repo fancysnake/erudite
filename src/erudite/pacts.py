@@ -133,13 +133,23 @@ class BookRepositoryProtocol(Protocol):
     def fill(self, book_id: int, values: BookFieldsData) -> None:
         """Write `values` to the book."""
 
+    def fill_empty(self, book_id: int, values: BookFieldsData) -> bool:
+        """Write `values` to the book, or write none; say if they were written.
+
+        None is written when the book holds one of their fields, or a decision
+        waits for it.
+        """
+
 
 class DecisionRepositoryProtocol(Protocol):
     def exists(self, book_id: int) -> bool:
         """Say if a decision waits for the book."""
 
-    def create(self, book_id: int, proposed: BookFieldsData) -> None:
-        """Store `proposed` as the decision that waits for the book."""
+    def create(self, book_id: int, proposed: BookFieldsData) -> bool:
+        """Store `proposed` as the decision that waits for the book.
+
+        False, and nothing stored, if a decision waits for the book already.
+        """
 
 
 class IgnoredExtensionsProtocol(Protocol):

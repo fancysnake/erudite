@@ -109,6 +109,24 @@ class BookRepository(BookRepositoryProtocol):
                 BookAuthor.objects.filter(book_id=book_id).delete()
                 _credit({book_id: values["authors"]})
 
+    @override
+    def fill_empty(self, book_id: int, values: BookFieldsData) -> bool:
+        scalars = {name: value for name, value in values.items() if name != "authors"}
+        empty = Book.objects.filter(
+            pk=book_id, decision__isnull=True, **dict.fromkeys(scalars, "")
+        )
+        if "authors" in values:
+            empty = empty.filter(credits__isnull=True)
+        with transaction.atomic():
+            # The update checks and writes in one statement: no save comes between.
+            # shortcut: authors alone are checked, then written; a save between
+            # the two fails as a locked database. Upgrade if that error shows up.
+            if not (empty.update(**scalars) if scalars else empty.exists()):
+                return False
+            if "authors" in values:
+                _credit({book_id: values["authors"]})
+        return True
+
 
 class DecisionRepository(DecisionRepositoryProtocol):
     @override
@@ -116,8 +134,11 @@ class DecisionRepository(DecisionRepositoryProtocol):
         return Decision.objects.filter(book_id=book_id).exists()
 
     @override
-    def create(self, book_id: int, proposed: BookFieldsData) -> None:
-        Decision.objects.create(book_id=book_id, proposed=proposed)
+    def create(self, book_id: int, proposed: BookFieldsData) -> bool:
+        _, created = Decision.objects.get_or_create(
+            book_id=book_id, defaults={"proposed": proposed}
+        )
+        return created
 
 
 class IgnoredExtensions(IgnoredExtensionsProtocol):

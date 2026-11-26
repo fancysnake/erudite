@@ -32,7 +32,7 @@ def test_a_proposal_for_fields_the_book_does_not_hold_is_filled_at_once():
     outcome = service.propose(BOOK, proposal)
 
     assert outcome == ProposalOutcome.FILLED
-    books.fill.assert_called_once_with(BOOK, proposal)
+    books.fill_empty.assert_called_once_with(BOOK, proposal)
     decisions.create.assert_not_called()
 
 
@@ -44,7 +44,28 @@ def test_a_proposal_for_a_field_the_book_holds_fills_nothing_and_waits():
 
     assert outcome == ProposalOutcome.WAITING
     decisions.create.assert_called_once_with(BOOK, proposal)
-    books.fill.assert_not_called()
+    books.fill_empty.assert_not_called()
+
+
+def test_a_proposal_waits_when_the_book_got_one_of_its_fields_after_the_read():
+    service, books, decisions = _service()
+    books.fill_empty.return_value = False
+    proposal = {"series": "Dune"}
+
+    outcome = service.propose(BOOK, proposal)
+
+    assert outcome == ProposalOutcome.WAITING
+    decisions.create.assert_called_once_with(BOOK, proposal)
+
+
+def test_a_proposal_is_skipped_when_a_decision_came_to_wait_after_the_check():
+    service, books, decisions = _service()
+    decisions.create.return_value = False
+
+    outcome = service.propose(BOOK, {"title": "Dune"})
+
+    assert outcome == ProposalOutcome.ALREADY_WAITING
+    books.fill_empty.assert_not_called()
 
 
 def test_a_book_with_a_waiting_decision_is_left_alone():
@@ -54,7 +75,7 @@ def test_a_book_with_a_waiting_decision_is_left_alone():
 
     assert outcome == ProposalOutcome.ALREADY_WAITING
     decisions.exists.assert_called_once_with(BOOK)
-    books.fill.assert_not_called()
+    books.fill_empty.assert_not_called()
     decisions.create.assert_not_called()
 
 
@@ -66,7 +87,7 @@ def test_a_proposal_that_says_what_the_book_says_brings_nothing_new():
     )
 
     assert outcome == ProposalOutcome.NOTHING_NEW
-    books.fill.assert_not_called()
+    books.fill_empty.assert_not_called()
     decisions.create.assert_not_called()
 
 
@@ -78,7 +99,7 @@ def test_only_the_values_that_differ_from_the_book_are_filled():
     )
 
     assert outcome == ProposalOutcome.FILLED
-    books.fill.assert_called_once_with(BOOK, {"authors": ["Frank Herbert"]})
+    books.fill_empty.assert_called_once_with(BOOK, {"authors": ["Frank Herbert"]})
 
 
 def test_proposed_author_names_are_trimmed_once_each_and_never_empty():
@@ -86,7 +107,7 @@ def test_proposed_author_names_are_trimmed_once_each_and_never_empty():
 
     service.propose(BOOK, {"authors": [" Frank Herbert", "Frank Herbert ", "", " "]})
 
-    books.fill.assert_called_once_with(BOOK, {"authors": ["Frank Herbert"]})
+    books.fill_empty.assert_called_once_with(BOOK, {"authors": ["Frank Herbert"]})
 
 
 def test_authors_the_book_holds_are_nothing_new_however_they_are_written():
@@ -95,5 +116,5 @@ def test_authors_the_book_holds_are_nothing_new_however_they_are_written():
     outcome = service.propose(BOOK, {"authors": ["Frank Herbert", " Frank Herbert"]})
 
     assert outcome == ProposalOutcome.NOTHING_NEW
-    books.fill.assert_not_called()
+    books.fill_empty.assert_not_called()
     decisions.create.assert_not_called()

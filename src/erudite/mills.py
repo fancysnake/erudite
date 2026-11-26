@@ -119,8 +119,11 @@ class ClassificationService(ClassificationServiceProtocol):
                 del new[name]
         if not new:
             return ProposalOutcome.NOTHING_NEW
-        if any(held.get(name) for name in new):
-            self._decisions.create(book_id, new)
+        # The book may change after the read: each write checks again and reports.
+        if not any(held.get(name) for name in new) and self._books.fill_empty(
+            book_id, new
+        ):
+            return ProposalOutcome.FILLED
+        if self._decisions.create(book_id, new):
             return ProposalOutcome.WAITING
-        self._books.fill(book_id, new)
-        return ProposalOutcome.FILLED
+        return ProposalOutcome.ALREADY_WAITING
