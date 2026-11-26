@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         GoodreadsExportProtocol,
         IgnoredExtensionsProtocol,
         OpenLibraryProtocol,
+        SyncRepositoryProtocol,
         TransactionProtocol,
         WorkDTO,
     )
@@ -44,9 +45,14 @@ if TYPE_CHECKING:
 
 class LibraryService(LibraryServiceProtocol):
     def __init__(
-        self, *, books: BookRepositoryProtocol, goodreads: GoodreadsExportProtocol
+        self,
+        *,
+        books: BookRepositoryProtocol,
+        syncs: SyncRepositoryProtocol,
+        goodreads: GoodreadsExportProtocol,
     ) -> None:
         self._books = books
+        self._syncs = syncs
         self._goodreads = goodreads
 
     @override
@@ -78,7 +84,7 @@ class LibraryService(LibraryServiceProtocol):
 
     @override
     def sync_progress(self) -> tuple[SyncProgressDTO, ...]:
-        total, counts = self._books.count(), self._books.sync_counts()
+        total, counts = self._books.count(), self._syncs.counts()
         return tuple(
             SyncProgressDTO(sync=sync, done=counts.get(sync, 0), total=total)
             for sync in SyncType
@@ -166,11 +172,11 @@ class ClassificationService(ClassificationServiceProtocol):
                 del new[name]
         if not new:
             return ProposalOutcome.NOTHING_NEW
-        if any(held.get(name) for name in new):
-            self._decisions.create(book_id, new)
+        if self._books.fill_empty(book_id, new):
+            return ProposalOutcome.FILLED
+        if self._decisions.create(book_id, new):
             return ProposalOutcome.WAITING
-        self._books.fill(book_id, new)
-        return ProposalOutcome.FILLED
+        return ProposalOutcome.ALREADY_WAITING
 
 
 def _first_visit(held: BookFieldsData) -> tuple[str, list[str]]:
@@ -188,10 +194,12 @@ class WorkService(WorkServiceProtocol):
         self,
         *,
         books: BookRepositoryProtocol,
+        syncs: SyncRepositoryProtocol,
         open_library: OpenLibraryProtocol,
         transaction: TransactionProtocol,
     ) -> None:
         self._books = books
+        self._syncs = syncs
         self._open_library = open_library
         self._transaction = transaction
 
@@ -252,4 +260,4 @@ class WorkService(WorkServiceProtocol):
         with self._transaction.atomic():
             self._books.set_work(book_id, picked)
             self._books.fill(book_id, values)
-            self._books.record_sync(book_id, SyncType.OPEN_LIBRARY)
+            self._syncs.record(book_id, SyncType.OPEN_LIBRARY)

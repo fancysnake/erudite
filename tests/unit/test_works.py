@@ -30,7 +30,10 @@ def _service(*, found=(), **held):
     books.fields.return_value = {"title": "mr fox", "authors": ["Dahl"]} | held
     open_library.search.side_effect = [list(works) for works in found]
     service = WorkService(
-        books=books, open_library=open_library, transaction=MagicMock()
+        books=books,
+        syncs=books.syncs,
+        open_library=open_library,
+        transaction=MagicMock(),
     )
     return service, books, open_library
 
@@ -122,7 +125,7 @@ def test_a_pick_gives_the_book_what_the_work_holds():
     books.fill.assert_called_once_with(
         BOOK, {"title": "Fantastic Mr Fox", "authors": ["Roald Dahl"]}
     )
-    books.record_sync.assert_called_once_with(BOOK, SyncType.OPEN_LIBRARY)
+    books.syncs.record.assert_called_once_with(BOOK, SyncType.OPEN_LIBRARY)
 
 
 def test_a_pick_of_a_work_without_a_title_or_authors_fills_neither():
@@ -144,9 +147,12 @@ def test_a_pick_makes_both_writes_in_one_transaction():
     writes.attach_mock(books.fill, "fill")
     writes.attach_mock(transaction.atomic.return_value.__exit__, "end")
 
-    WorkService(books=books, open_library=open_library, transaction=transaction).pick(
-        BOOK, FILM.work_id
-    )
+    WorkService(
+        books=books,
+        syncs=MagicMock(),
+        open_library=open_library,
+        transaction=transaction,
+    ).pick(BOOK, FILM.work_id)
 
     assert [name for name, _args, _kwargs in writes.mock_calls] == [
         "begin",

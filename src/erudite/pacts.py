@@ -255,12 +255,6 @@ class BookRepositoryProtocol(Protocol):
         `todo`.
         """
 
-    def sync_counts(self) -> dict[SyncType, int]:
-        """Count, for each sync with an entry, the books it reached."""
-
-    def record_sync(self, book_id: int, sync: SyncType) -> None:
-        """Add to the sync log that `sync` gave values to the book now."""
-
     def get(self, book_id: int) -> BookDTO:
         """Return the book; `NotFoundError` if the library has no such book."""
 
@@ -294,13 +288,33 @@ class BookRepositoryProtocol(Protocol):
         `NotFoundError` if the library has no such book.
         """
 
+    def fill_empty(self, book_id: int, values: BookFieldsData) -> bool:
+        """Write `values` to the book, or write none; say if they were written.
+
+        None is written when the book holds one of their fields, or a decision
+        waits for it.
+        """
+
+
+class SyncRepositoryProtocol(Protocol):
+    """The sync log."""
+
+    def counts(self) -> dict[SyncType, int]:
+        """Count, for each sync with an entry, the books it reached."""
+
+    def record(self, book_id: int, sync: SyncType) -> None:
+        """Add to the sync log that `sync` gave values to the book now."""
+
 
 class DecisionRepositoryProtocol(Protocol):
     def exists(self, book_id: int) -> bool:
         """Say if a decision waits for the book."""
 
-    def create(self, book_id: int, proposed: BookFieldsData) -> None:
-        """Store `proposed` as the decision that waits for the book."""
+    def create(self, book_id: int, proposed: BookFieldsData) -> bool:
+        """Store `proposed` as the decision that waits for the book.
+
+        False, and nothing stored, if a decision waits for the book already.
+        """
 
 
 class IgnoredExtensionsProtocol(Protocol):

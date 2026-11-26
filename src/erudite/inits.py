@@ -10,6 +10,7 @@ from erudite.links.db.django.repositories import (
     BookRepository,
     DecisionRepository,
     IgnoredExtensions,
+    SyncRepository,
 )
 from erudite.links.goodreads.csv import GoodreadsCsvExport
 from erudite.links.open_library.http import OpenLibraryHttp
@@ -34,7 +35,11 @@ class Services(ServicesProtocol):
 
     @cached_property
     def library(self) -> LibraryService:
-        return LibraryService(books=BookRepository(), goodreads=GoodreadsCsvExport())
+        return LibraryService(
+            books=BookRepository(),
+            syncs=SyncRepository(),
+            goodreads=GoodreadsCsvExport(),
+        )
 
     @cached_property
     def book_files(self) -> BookFilesService:
@@ -51,7 +56,10 @@ class Services(ServicesProtocol):
     @cached_property
     def works(self) -> WorkService:
         return WorkService(
-            books=BookRepository(), open_library=OPEN_LIBRARY, transaction=transaction
+            books=BookRepository(),
+            syncs=SyncRepository(),
+            open_library=OPEN_LIBRARY,
+            transaction=transaction,
         )
 
 

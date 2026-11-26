@@ -29,6 +29,7 @@ from erudite.pacts import (
     NotFoundError,
     PickedWorkData,
     RawBookData,
+    SyncRepositoryProtocol,
     SyncType,
 )
 
@@ -98,17 +99,6 @@ class BookRepository(BookRepositoryProtocol):
                 | Q(authors__name__icontains=query)
             ).distinct()
         return [_summary(book) for book in books]
-
-    @override
-    def sync_counts(self) -> dict[SyncType, int]:
-        rows = Sync.objects.values("sync_type").annotate(
-            books=Count("book", distinct=True)
-        )
-        return {SyncType(row["sync_type"]): row["books"] for row in rows.order_by()}
-
-    @override
-    def record_sync(self, book_id: int, sync: SyncType) -> None:
-        Sync.objects.create(book_id=book_id, sync_type=sync)
 
     @override
     def get(self, book_id: int) -> BookDTO:
@@ -193,6 +183,34 @@ class BookRepository(BookRepositoryProtocol):
                 )
             book.save()
 
+    @override
+    def fill_empty(self, book_id: int, values: BookFieldsData) -> bool:
+        empty = Book.objects.filter(
+            pk=book_id,
+            decision__isnull=True,
+            **dict.fromkeys(values.keys() - {"authors"}, ""),
+        )
+        if "authors" in values:
+            empty = empty.filter(credits__isnull=True)
+        with transaction.atomic():
+            if not empty.exists():
+                return False
+            self.fill(book_id, values)
+        return True
+
+
+class SyncRepository(SyncRepositoryProtocol):
+    @override
+    def counts(self) -> dict[SyncType, int]:
+        rows = Sync.objects.values("sync_type").annotate(
+            books=Count("book", distinct=True)
+        )
+        return {SyncType(row["sync_type"]): row["books"] for row in rows.order_by()}
+
+    @override
+    def record(self, book_id: int, sync: SyncType) -> None:
+        Sync.objects.create(book_id=book_id, sync_type=sync)
+
 
 class DecisionRepository(DecisionRepositoryProtocol):
     @override
@@ -200,8 +218,11 @@ class DecisionRepository(DecisionRepositoryProtocol):
         return Decision.objects.filter(book_id=book_id).exists()
 
     @override
-    def create(self, book_id: int, proposed: BookFieldsData) -> None:
-        Decision.objects.create(book_id=book_id, proposed=proposed)
+    def create(self, book_id: int, proposed: BookFieldsData) -> bool:
+        _, created = Decision.objects.get_or_create(
+            book_id=book_id, defaults={"proposed": proposed}
+        )
+        return created
 
 
 class IgnoredExtensions(IgnoredExtensionsProtocol):

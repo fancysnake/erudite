@@ -1,0 +1,60 @@
+{% load i18n %}
+{% if candidates.failure %}
+  <p class="message message--error">{{ candidates.failure }}</p>
+  <button type="button"
+          hx-get="{{ request.get_full_path }}"
+          hx-target="#works"
+          hx-disabled-elt="this">{% translate "Search again" %}</button>
+{% endif %}
+<ul class="works">
+  {% for work in candidates.works %}
+    <li class="work">
+      {% if work.cover_id %}
+        <img class="work__cover"
+             src="https://covers.openlibrary.org/b/id/{{ work.cover_id }}-M.jpg"
+             alt=""
+             width="90"
+             height="135"
+             loading="lazy">
+      {% else %}
+        <span class="work__cover">{% translate "No cover" %}</span>
+      {% endif %}
+      <div>
+        <strong>{{ work.title }}</strong>
+        <br>
+        {{ work.authors|join:", " }}
+        <br>
+        {% if work.first_year %}
+          {% blocktranslate with year=work.first_year trimmed %}
+            First published in {{ year }}.
+          {% endblocktranslate %}
+        {% endif %}
+        {% blocktranslate count counter=work.edition_count trimmed %}
+          {{ counter }} edition.
+        {% plural %}
+          {{ counter }} editions.
+        {% endblocktranslate %}
+        <br>
+        <a href="https://openlibrary.org/works/{{ work.work_id }}">
+          {% blocktranslate with id=work.work_id trimmed %}
+            {{ id }} at Open Library
+          {% endblocktranslate %}
+        </a>
+        {% if work.description %}
+          {{ work.description|linebreaks }}
+        {% else %}
+          <p>{% translate "No description." %}</p>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="work" value="{{ work.work_id }}">
+          <button type="submit">{% translate "Pick this work" %}</button>
+        </form>
+      </div>
+    </li>
+  {% empty %}
+    {% if not candidates.failure %}
+      <li class="empty">{% translate "Open Library found no work. Change the search." %}</li>
+    {% endif %}
+  {% endfor %}
+</ul>

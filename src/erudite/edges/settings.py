@@ -76,7 +76,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "erudite.edges.wsgi.application"
 
-DATABASES = {"default": {**env.db("DATABASE_URL"), "ATOMIC_REQUESTS": True}}
+_DATABASE = env.db("DATABASE_URL")
+# A transaction takes the write lock at its start: none writes between its read
+# and its write.
+_OPTIONS = {**_DATABASE.get("OPTIONS", {}), "transaction_mode": "IMMEDIATE"}
+DATABASES = {"default": {**_DATABASE, "ATOMIC_REQUESTS": True, "OPTIONS": _OPTIONS}}
 
 AUTH_PASSWORD_VALIDATORS = [
     {

@@ -27,7 +27,7 @@ def _service(*, exported=(), known=()):
     books.keys.return_value = set(known)
     goodreads = MagicMock()
     goodreads.read.return_value = list(exported)
-    service = LibraryService(books=books, goodreads=goodreads)
+    service = LibraryService(books=books, syncs=MagicMock(), goodreads=goodreads)
     return service, books, goodreads
 
 
@@ -82,9 +82,10 @@ def test_the_book_list_keeps_the_books_the_sync_filters_name():
 
 
 def test_the_sync_progress_counts_the_books_each_sync_reached():
-    service, books, _ = _service()
+    books, syncs = MagicMock(), MagicMock()
     books.count.return_value = 5
-    books.sync_counts.return_value = {SyncType.OPEN_LIBRARY: 2}
+    syncs.counts.return_value = {SyncType.OPEN_LIBRARY: 2}
+    service = LibraryService(books=books, syncs=syncs, goodreads=MagicMock())
 
     assert service.sync_progress() == (
         SyncProgressDTO(sync=SyncType.GOODREADS, done=0, total=5),
