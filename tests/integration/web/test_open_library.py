@@ -64,16 +64,19 @@ def test_the_picker_shows_the_works_found_for_the_book(staff, book, *, open_libr
 def test_the_picker_searches_for_what_the_user_typed_and_keeps_the_queue(
     staff, book, *, open_library
 ):
-    response = staff.get(_url(book), {"q": "fantastic fox", "queue": "5,6"})
+    response = staff.get(_url(book), {"q": "fantastic fox", "queue": ["5", "6"]})
 
     assert response.status_code == HTTPStatus.OK
     assert open_library.queries == ["fantastic fox"]
     assert response.context["candidates"].query == "fantastic fox"
     assert response.context["candidates"].works == ()
-    assert response.context["queue"] == "5,6"
+    assert response.context["queue"] == ["5", "6"]
     assert response.context["after"] == "/books/5/open-library/?queue=6"
     assert "Open Library found no work." in response.text
-    assert '<input type="hidden" name="queue" value="5,6">' in response.text
+    assert (
+        '<input type="hidden" name="queue" value="5">'
+        '<input type="hidden" name="queue" value="6">'
+    ) in response.text
     assert '<a href="/books/5/open-library/?queue=6">Skip this book</a>' in (
         response.text
     )
@@ -88,8 +91,21 @@ def test_the_picker_says_when_open_library_gives_no_answer(
 
     assert response.status_code == HTTPStatus.OK
     assert [t.name for t in response.templates] == TEMPLATES
-    assert response.context["candidates"] is None
+    assert response.context["candidates"] == CandidatesDTO(
+        book_id=book.pk,
+        title="mr fox 2",
+        authors=("Dahl",),
+        query="mr fox 2 Dahl",
+        works=(),
+        failure="Open Library gave no answer: <urlopen error timed out>",
+    )
+    assert _messages(response) == [response.context["candidates"].failure]
+    assert not response.context["queue"]
+    assert response.context["after"] == f"/admin/erudite_db/book/{book.pk}/change/"
     assert "Open Library gave no answer" in response.text
+    assert "“mr fox 2” by Dahl" in response.text
+    assert 'value="mr fox 2 Dahl"' in response.text
+    assert "Open Library found no work." not in response.text
     assert "Skip this book" in response.text
 
 
@@ -123,17 +139,21 @@ def test_a_pick_writes_the_work_to_the_book(staff, book, *, open_library):
 
 @pytest.mark.parametrize(
     ("queue", "target"),
-    (("5,6", "/books/5/open-library/?queue=6"), ("5", "/books/5/open-library/")),
+    (
+        ("queue=5&queue=6", "/books/5/open-library/?queue=6"),
+        ("queue=5", "/books/5/open-library/"),
+        ("queue=x", None),
+    ),
 )
 def test_a_pick_leads_to_the_next_book_of_the_queue(
     staff, book, *, open_library, queue, target
 ):
     open_library.searches = {f"key:/works/{FOX_ID}": [FOX]}
 
-    response = staff.post(_url(book, f"?queue={queue}"), {"work": FOX_ID})
+    response = staff.post(_url(book, f"?{queue}"), {"work": FOX_ID})
 
     assert response.status_code == HTTPStatus.FOUND
-    assert response.url == target
+    assert response.url == (target or f"/admin/erudite_db/book/{book.pk}/change/")
 
 
 @pytest.mark.usefixtures("open_library")
@@ -146,12 +166,12 @@ def test_a_pick_of_a_work_open_library_lacks_is_not_found(staff, book):
 
 
 @pytest.mark.parametrize("work", ("", "45804", "OL45804W/../x"))
-def test_a_pick_of_something_that_is_no_work_id_is_refused(
+def test_a_pick_of_something_that_is_no_work_id_is_not_found(
     staff, book, *, open_library, work
 ):
     response = staff.post(_url(book), {"work": work})
 
-    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.status_code == HTTPStatus.NOT_FOUND
     assert not open_library.requests
 
 

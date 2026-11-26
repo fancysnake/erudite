@@ -353,7 +353,7 @@ def test_admin_adds_no_decision_by_hand(admin_client):
 @pytest.mark.parametrize(
     ("titles", "target"),
     (
-        (("Dune", "Mort", "Sourcery"), "/books/{0}/open-library/?queue={1}%2C{2}"),
+        (("Dune", "Mort", "Sourcery"), "/books/{0}/open-library/?queue={1}&queue={2}"),
         (("Dune",), "/books/{0}/open-library/"),
     ),
 )

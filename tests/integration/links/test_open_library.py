@@ -76,12 +76,9 @@ def test_an_answer_that_cannot_be_read_is_an_error(monkeypatch, *, answer, messa
         client.search("fox")
 
 
-def test_a_request_waits_until_the_interval_passed_since_the_last(
-    open_library, monkeypatch
-):
+def test_a_request_waits_until_the_interval_passed_since_the_last(open_library):
     interval = 0.2
-    monkeypatch.setattr(OpenLibraryHttp, "interval", interval)
-    client = OpenLibraryHttp()
+    client = OpenLibraryHttp(interval=interval)
     client.cover(1)
     first = time.monotonic()
 

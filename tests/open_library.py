@@ -24,6 +24,7 @@ FOX_WORK = WorkDTO(
     authors=("Roald Dahl",),
     first_year=1970,
     cover_id=6498519,
+    cover_url="https://covers.openlibrary.org/b/id/6498519-M.jpg",
     edition_count=161,
 )
 BARE_WORK = WorkDTO(
@@ -32,6 +33,7 @@ BARE_WORK = WorkDTO(
     authors=(),
     first_year=None,
     cover_id=None,
+    cover_url="",
     edition_count=1,
 )
 

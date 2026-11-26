@@ -120,7 +120,6 @@ class BookRepository(BookRepositoryProtocol):
         with transaction.atomic():
             book = _book(book_id)
             book.open_library_work = work["work_id"]
-            book.title = work["title"] or book.title
             book.description = work["description"] or book.description
             if work["cover"] is not None:
                 # The storage never overwrites: without this the old image stays.
@@ -129,9 +128,6 @@ class BookRepository(BookRepositoryProtocol):
                     f"{book_id}.jpg", ContentFile(work["cover"]), save=False
                 )
             book.save()
-            if work["authors"]:
-                BookAuthor.objects.filter(book_id=book_id).delete()
-                _credit({book_id: work["authors"]})
 
 
 class DecisionRepository(DecisionRepositoryProtocol):

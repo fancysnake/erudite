@@ -1,9 +1,10 @@
+from copy import replace
 from unittest.mock import MagicMock, call
 
 import pytest
 
 from erudite.mills import WorkService
-from erudite.pacts import CandidatesDTO, NotFoundError, WorkDTO
+from erudite.pacts import CandidatesDTO, NotFoundError, OpenLibraryError, WorkDTO
 from tests.open_library import FOX_WORK as FOX
 
 BOOK = 7
@@ -13,6 +14,7 @@ FILM = WorkDTO(
     authors=("Wes Anderson",),
     first_year=2016,
     cover_id=None,
+    cover_url="",
     edition_count=1,
 )
 
@@ -21,7 +23,10 @@ def _service(*, found=(), **held):
     books, open_library = MagicMock(), MagicMock()
     books.fields.return_value = {"title": "mr fox", "authors": ["Dahl"]} | held
     open_library.search.side_effect = [list(works) for works in found]
-    return WorkService(books=books, open_library=open_library), books, open_library
+    service = WorkService(
+        books=books, open_library=open_library, transaction=MagicMock()
+    )
+    return service, books, open_library
 
 
 def test_the_first_search_is_for_the_title_and_authors_of_the_book():
@@ -93,12 +98,44 @@ def test_a_pick_gives_the_book_what_the_work_holds():
         BOOK,
         {
             "work_id": FOX.work_id,
-            "title": "Fantastic Mr Fox",
-            "authors": ["Roald Dahl"],
             "description": "A fox outwits three farmers.",
             "cover": b"a JPEG",
         },
     )
+    books.fill.assert_called_once_with(
+        BOOK, {"title": "Fantastic Mr Fox", "authors": ["Roald Dahl"]}
+    )
+
+
+def test_a_pick_of_a_work_without_a_title_or_authors_fills_neither():
+    service, books, _open_library = _service(
+        found=[[replace(FILM, title="", authors=())]]
+    )
+
+    service.pick(BOOK, FILM.work_id)
+
+    books.fill.assert_called_once_with(BOOK, {})
+
+
+def test_a_pick_makes_both_writes_in_one_transaction():
+    books, open_library, transaction = MagicMock(), MagicMock(), MagicMock()
+    open_library.search.return_value = [FILM]
+    writes = MagicMock()
+    writes.attach_mock(transaction.atomic.return_value.__enter__, "begin")
+    writes.attach_mock(books.set_work, "set_work")
+    writes.attach_mock(books.fill, "fill")
+    writes.attach_mock(transaction.atomic.return_value.__exit__, "end")
+
+    WorkService(books=books, open_library=open_library, transaction=transaction).pick(
+        BOOK, FILM.work_id
+    )
+
+    assert [name for name, _args, _kwargs in writes.mock_calls] == [
+        "begin",
+        "set_work",
+        "fill",
+        "end",
+    ]
 
 
 def test_a_pick_of_a_work_without_a_cover_asks_for_no_image():
@@ -117,6 +154,33 @@ def test_a_pick_of_a_work_open_library_lacks_changes_nothing():
         service.pick(BOOK, "OL9W")
 
     books.set_work.assert_not_called()
+
+
+@pytest.mark.parametrize("work_id", ("", "45804", "OL45804W/../x"))
+def test_a_pick_of_something_that_is_no_work_id_asks_open_library_nothing(work_id):
+    service, books, open_library = _service()
+
+    with pytest.raises(NotFoundError, match="not an Open Library work id"):
+        service.pick(BOOK, work_id)
+
+    open_library.search.assert_not_called()
+    books.set_work.assert_not_called()
+
+
+def test_a_failed_search_still_gives_the_book_and_what_was_found():
+    service, _books, open_library = _service(isbn13="9780140328721")
+    open_library.search.side_effect = [[FOX], OpenLibraryError("no answer")]
+
+    candidates = service.candidates(BOOK)
+
+    assert candidates == CandidatesDTO(
+        book_id=BOOK,
+        title="mr fox",
+        authors=("Dahl",),
+        query="mr fox Dahl",
+        works=(FOX,),
+        failure="no answer",
+    )
 
 
 def test_a_pick_for_a_book_the_library_lacks_asks_open_library_nothing():

@@ -4,30 +4,33 @@ from typing import TYPE_CHECKING, override
 
 from erudite.pacts import (
     BOOK_FIELDS,
+    BookFieldsData,
     BookFilesServiceProtocol,
     BookSource,
     CandidatesDTO,
     ClassificationServiceProtocol,
     LibraryServiceProtocol,
     NotFoundError,
+    OpenLibraryError,
     PickedWorkData,
     ProposalOutcome,
     RawBookData,
     SyncSummaryDTO,
     WorkServiceProtocol,
 )
+from erudite.specs import WORK_ID
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from erudite.pacts import (
-        BookFieldsData,
         BookRepositoryProtocol,
         DecisionRepositoryProtocol,
         DiskBookFilesProtocol,
         GoodreadsExportProtocol,
         IgnoredExtensionsProtocol,
         OpenLibraryProtocol,
+        TransactionProtocol,
         WorkDTO,
     )
 
@@ -132,36 +135,62 @@ class ClassificationService(ClassificationServiceProtocol):
         return ProposalOutcome.FILLED
 
 
+def _first_visit(held: BookFieldsData) -> tuple[str, list[str]]:
+    """Return the query a page shows before the user types one, and its searches.
+
+    The searches are the ISBN, if the book holds one, then the query.
+    """
+    query = " ".join([held.get("title", ""), *held.get("authors", [])]).strip()
+    isbn = held.get("isbn13") or held.get("isbn10")
+    return query, [f"isbn:{isbn}", query] if isbn else [query]
+
+
 class WorkService(WorkServiceProtocol):
     def __init__(
-        self, *, books: BookRepositoryProtocol, open_library: OpenLibraryProtocol
+        self,
+        *,
+        books: BookRepositoryProtocol,
+        open_library: OpenLibraryProtocol,
+        transaction: TransactionProtocol,
     ) -> None:
         self._books = books
         self._open_library = open_library
+        self._transaction = transaction
 
     @override
     def candidates(self, book_id: int, query: str | None = None) -> CandidatesDTO:
         held = self._books.fields(book_id)
-        title, authors = held.get("title", ""), held.get("authors", [])
-        works: list[WorkDTO] = []
+        # `None` is a first visit; a blank query is one the user sent.
         if query is None:
-            query = " ".join([title, *authors])
-            if isbn := held.get("isbn13") or held.get("isbn10"):
-                works = self._open_library.search(f"isbn:{isbn}")
-        if query := query.strip():
-            known = {work.work_id for work in works}
-            found = self._open_library.search(query)
-            works += [work for work in found if work.work_id not in known]
+            query, searches = _first_visit(held)
+        else:
+            query = query.strip()
+            searches = [query]
+        # By work id: a work two searches find stays in its first place.
+        works: dict[str, WorkDTO] = {}
+        failure = ""
+        for search in [text for text in searches if text]:
+            try:
+                found = self._open_library.search(search)
+            except OpenLibraryError as exc:
+                failure = str(exc)
+                break
+            for work in found:
+                works.setdefault(work.work_id, work)
         return CandidatesDTO(
             book_id=book_id,
-            title=title,
-            authors=tuple(authors),
+            title=held.get("title", ""),
+            authors=tuple(held.get("authors", [])),
             query=query,
-            works=tuple(works),
+            works=tuple(works.values()),
+            failure=failure,
         )
 
     @override
     def pick(self, book_id: int, work_id: str) -> None:
+        if not WORK_ID.fullmatch(work_id):
+            msg = f"{work_id!r} is not an Open Library work id."
+            raise NotFoundError(msg)
         # Fails here for a book the library lacks, before any request is sent.
         self._books.fields(book_id)
         if not (found := self._open_library.search(f"key:/works/{work_id}")):
@@ -169,13 +198,17 @@ class WorkService(WorkServiceProtocol):
             raise NotFoundError(msg)
         work = found[0]
         cover = self._open_library.cover(work.cover_id) if work.cover_id else None
-        self._books.set_work(
-            book_id,
-            PickedWorkData(
-                work_id=work_id,
-                title=work.title,
-                authors=list(work.authors),
-                description=self._open_library.description(work_id),
-                cover=cover,
-            ),
+        picked = PickedWorkData(
+            work_id=work_id,
+            description=self._open_library.description(work_id),
+            cover=cover,
         )
+        # An empty title or no author changes nothing.
+        values = BookFieldsData()
+        if work.title:
+            values["title"] = work.title
+        if work.authors:
+            values["authors"] = list(work.authors)
+        with self._transaction.atomic():
+            self._books.set_work(book_id, picked)
+            self._books.fill(book_id, values)

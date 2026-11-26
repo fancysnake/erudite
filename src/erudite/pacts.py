@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, TypedDict
 
 if TYPE_CHECKING:
     import datetime as dt
+    from contextlib import AbstractContextManager
     from pathlib import Path
 
 
@@ -117,26 +118,30 @@ class WorkDTO:
     authors: tuple[str, ...]
     first_year: int | None
     cover_id: int | None
+    # The address of a medium cover image for a page to show; empty without one.
+    cover_url: str
     edition_count: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CandidatesDTO:
-    """A book as the library holds it, and the works a search found for it."""
+    """A book as the library holds it, and the works a search found for it.
+
+    `failure` says why a search failed; `works` then holds what was found before.
+    """
 
     book_id: int
     title: str
     authors: tuple[str, ...]
     query: str
     works: tuple[WorkDTO, ...]
+    failure: str = ""
 
 
 class PickedWorkData(TypedDict):
-    """What the work the user picked gives its book; empty where it has none."""
+    """What the picked work gives its book beside `BookFieldsData`; empty is none."""
 
     work_id: str
-    title: str
-    authors: list[str]
     description: str
     cover: bytes | None
 
@@ -152,6 +157,11 @@ class OpenLibraryProtocol(Protocol):
 
     def cover(self, cover_id: int) -> bytes:
         """Return the cover image, a JPEG."""
+
+
+class TransactionProtocol(Protocol):
+    def atomic(self) -> AbstractContextManager[None]:
+        """Keep every write made inside the block, or none of them."""
 
 
 class GoodreadsExportProtocol(Protocol):

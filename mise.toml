@@ -21,7 +21,7 @@ PYTHONPATH = "src"
 PACKAGE = "erudite"
 SRC_PATHS = "src"
 TEST_PATHS = "tests"
-SCRIPT_PATHS = ""
+SCRIPT_PATHS = "vulture_whitelist.py"
 TOML_PATHS = "*.toml .taplo.toml"
 
 [task_config]

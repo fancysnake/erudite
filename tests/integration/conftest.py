@@ -2,6 +2,7 @@ import csv
 
 import pytest
 
+from erudite import inits
 from erudite.links.open_library import http
 from tests.goodreads import GOODREADS_COLUMNS
 from tests.open_library import FakeOpenLibrary
@@ -33,5 +34,5 @@ def open_library_fixture(monkeypatch):
     """Answer for Open Library, without the wait between two requests."""
     fake = FakeOpenLibrary()
     monkeypatch.setattr(http, "urlopen", fake)
-    monkeypatch.setattr(http.OpenLibraryHttp, "interval", 0)
+    monkeypatch.setattr(inits, "OPEN_LIBRARY", http.OpenLibraryHttp(interval=0))
     return fake

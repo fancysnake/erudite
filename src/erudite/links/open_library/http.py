@@ -3,8 +3,7 @@
 import json
 import threading
 import time
-from contextlib import ExitStack
-from typing import TYPE_CHECKING, ClassVar, override
+from typing import TYPE_CHECKING, override
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -40,46 +39,55 @@ def _number(value: _Json) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _cover_path(cover_id: int, size: str) -> str:
+    return f"/b/id/{cover_id}-{size}.jpg"
+
+
 def _work(doc: dict[str, _Json]) -> WorkDTO:
+    cover_id = _number(doc.get("cover_i"))
     return WorkDTO(
         work_id=_text(doc.get("key")).removeprefix("/works/"),
         title=_text(doc.get("title")),
         authors=tuple(_text(name) for name in _items(doc.get("author_name"))),
         first_year=_number(doc.get("first_publish_year")),
-        cover_id=_number(doc.get("cover_i")),
+        cover_id=cover_id,
+        cover_url=(
+            f"https://{_COVERS}{_cover_path(cover_id, 'M')}" if cover_id else ""
+        ),
         edition_count=_number(doc.get("edition_count")) or 0,
     )
 
 
 def _read(host: str, path: str) -> bytes:
-    with ExitStack() as stack:
-        answer: HTTPResponse = stack.enter_context(
-            urlopen(
-                Request(f"https://{host}{path}", headers={"User-Agent": "erudite"}),
-                timeout=_TIMEOUT,
-            )
-        )
+    # `urlopen` is typed as `Any`: the declaration gives the answer its type.
+    answer: HTTPResponse
+    with urlopen(
+        Request(f"https://{host}{path}", headers={"User-Agent": "erudite"}),
+        timeout=_TIMEOUT,
+    ) as answer:
         return answer.read()
 
 
 class OpenLibraryHttp(OpenLibraryProtocol):
     """Sends the query and no contact detail, so the rate is the unidentified one."""
 
-    # Open Library allows one request each second; the process shares the pace.
-    interval: ClassVar[float] = 1.0
-    _lock: ClassVar[threading.Lock] = threading.Lock()
-    _last: ClassVar[float] = 0.0
+    def __init__(self, *, interval: float = 1.0) -> None:
+        # Open Library allows one request each second. One client paces its own
+        # requests, so a process must share one client.
+        self._interval = interval
+        self._lock = threading.Lock()
+        self._last = 0.0
 
     def _get(self, host: str, path: str) -> bytes:
         with self._lock:
-            time.sleep(max(0.0, self._last + self.interval - time.monotonic()))
+            time.sleep(max(0.0, self._last + self._interval - time.monotonic()))
             try:
                 return _read(host, path)
             except OSError as exc:
                 msg = f"Open Library gave no answer: {exc}"
                 raise OpenLibraryError(msg) from exc
             finally:
-                OpenLibraryHttp._last = time.monotonic()
+                self._last = time.monotonic()
 
     def _json(self, path: str) -> dict[str, _Json]:
         try:
@@ -106,4 +114,4 @@ class OpenLibraryHttp(OpenLibraryProtocol):
 
     @override
     def cover(self, cover_id: int) -> bytes:
-        return self._get(_COVERS, f"/b/id/{cover_id}-L.jpg")
+        return self._get(_COVERS, _cover_path(cover_id, "L"))

@@ -3,6 +3,8 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from erudite.links.book_files.disk import DiskBookFiles
 from erudite.links.db.django.repositories import (
     BookRepository,
@@ -21,6 +23,10 @@ from erudite.pacts import RootRequestProtocol, ServicesProtocol
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+# One for the process: the client paces the requests of every request together.
+OPEN_LIBRARY = OpenLibraryHttp()
 
 
 class Services(ServicesProtocol):
@@ -44,7 +50,9 @@ class Services(ServicesProtocol):
 
     @cached_property
     def works(self) -> WorkService:
-        return WorkService(books=BookRepository(), open_library=OpenLibraryHttp())
+        return WorkService(
+            books=BookRepository(), open_library=OPEN_LIBRARY, transaction=transaction
+        )
 
 
 class ServiceInjectionMiddleware[Response]:
