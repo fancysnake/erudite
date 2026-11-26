@@ -1,8 +1,13 @@
 # Project tasks. Python format/lint/test tasks live in python_tasks.toml.
 
 [bootstrap]
-description = "Set up a fresh clone: dependencies, commit hooks, database"
-run = ["poetry install", "hk install --mise", "django-admin migrate"]
+description = "Set up a fresh clone: dependencies, commit hooks, database, vendored files"
+run = [
+    "poetry install",
+    "hk install --mise",
+    "django-admin migrate",
+    "django-admin downloadvendor",
+]
 
 [dj]
 description = "Run any django-admin subcommand against the dev settings"

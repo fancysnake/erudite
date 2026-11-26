@@ -1,11 +1,14 @@
 """Business logic: services over the protocols in pacts."""
 
+import math
 from typing import TYPE_CHECKING, override
 
 from erudite.pacts import (
     BOOK_FIELDS,
+    PAGE_SIZES,
     BookFieldsData,
     BookFilesServiceProtocol,
+    BookListDTO,
     BookSource,
     CandidatesDTO,
     ClassificationServiceProtocol,
@@ -15,7 +18,9 @@ from erudite.pacts import (
     PickedWorkData,
     ProposalOutcome,
     RawBookData,
+    SyncProgressDTO,
     SyncSummaryDTO,
+    SyncType,
     WorkServiceProtocol,
 )
 from erudite.specs import WORK_ID
@@ -24,6 +29,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from erudite.pacts import (
+        BookDTO,
+        BookListQuery,
         BookRepositoryProtocol,
         DecisionRepositoryProtocol,
         DiskBookFilesProtocol,
@@ -43,8 +50,39 @@ class LibraryService(LibraryServiceProtocol):
         self._goodreads = goodreads
 
     @override
-    def book_count(self) -> int:
-        return self._books.count()
+    def books(self, asked: BookListQuery) -> BookListDTO:
+        page, size = asked["page"], asked["size"]
+        if size not in PAGE_SIZES:
+            msg = f"The book list has no pages of {size} books."
+            raise NotFoundError(msg)
+        query = asked["query"].strip()
+        # shortcut: every found book is loaded to cut one page, move the cut to
+        # the repository when the list gets slow.
+        found = self._books.search(query, done=asked["done"], todo=asked["todo"])
+        pages = max(math.ceil(len(found) / size), 1)
+        if not 1 <= page <= pages:
+            msg = f"The book list has no page {page}."
+            raise NotFoundError(msg)
+        return BookListDTO(
+            query=query,
+            size=size,
+            books=tuple(found[(page - 1) * size : page * size]),
+            total=len(found),
+            page=page,
+            pages=pages,
+        )
+
+    @override
+    def book(self, book_id: int) -> BookDTO:
+        return self._books.get(book_id)
+
+    @override
+    def sync_progress(self) -> tuple[SyncProgressDTO, ...]:
+        total, counts = self._books.count(), self._books.sync_counts()
+        return tuple(
+            SyncProgressDTO(sync=sync, done=counts.get(sync, 0), total=total)
+            for sync in SyncType
+        )
 
     @override
     def import_goodreads(self, path: Path) -> SyncSummaryDTO:
@@ -158,7 +196,9 @@ class WorkService(WorkServiceProtocol):
         self._transaction = transaction
 
     @override
-    def candidates(self, book_id: int, query: str | None = None) -> CandidatesDTO:
+    def candidates(
+        self, book_id: int, query: str | None = None, *, search: bool = True
+    ) -> CandidatesDTO:
         held = self._books.fields(book_id)
         # `None` is a first visit; a blank query is one the user sent.
         if query is None:
@@ -169,9 +209,9 @@ class WorkService(WorkServiceProtocol):
         # By work id: a work two searches find stays in its first place.
         works: dict[str, WorkDTO] = {}
         failure = ""
-        for search in [text for text in searches if text]:
+        for text in [text for text in searches if text and search]:
             try:
-                found = self._open_library.search(search)
+                found = self._open_library.search(text)
             except OpenLibraryError as exc:
                 failure = str(exc)
                 break
@@ -212,3 +252,4 @@ class WorkService(WorkServiceProtocol):
         with self._transaction.atomic():
             self._books.set_work(book_id, picked)
             self._books.fill(book_id, values)
+            self._books.record_sync(book_id, SyncType.OPEN_LIBRARY)

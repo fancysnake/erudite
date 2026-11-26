@@ -7,12 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}erudite{% endblock title %}</title>
     <link rel="stylesheet" href="{% static 'erudite/base.css' %}">
+    <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#main">{% translate "Skip to the content" %}</a>
     <header class="site-header">
-      <a class="site-header__name" href="{% url 'home' %}">erudite</a>
+      <a class="site-header__name" href="{% url 'home' %}" translate="no">erudite</a>
     </header>
-    <main class="site-main">
+    <main class="site-main" id="main">
       {% for message in messages %}<p class="message message--{{ message.level_tag }}">{{ message }}</p>{% endfor %}
       {% block content %}
       {% endblock content %}

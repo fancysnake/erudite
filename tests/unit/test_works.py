@@ -4,7 +4,13 @@ from unittest.mock import MagicMock, call
 import pytest
 
 from erudite.mills import WorkService
-from erudite.pacts import CandidatesDTO, NotFoundError, OpenLibraryError, WorkDTO
+from erudite.pacts import (
+    CandidatesDTO,
+    NotFoundError,
+    OpenLibraryError,
+    SyncType,
+    WorkDTO,
+)
 from tests.open_library import FOX_WORK as FOX
 
 BOOK = 7
@@ -14,8 +20,8 @@ FILM = WorkDTO(
     authors=("Wes Anderson",),
     first_year=2016,
     cover_id=None,
-    cover_url="",
     edition_count=1,
+    description="",
 )
 
 
@@ -43,6 +49,17 @@ def test_the_first_search_is_for_the_title_and_authors_of_the_book():
     )
     books.fields.assert_called_once_with(BOOK)
     open_library.search.assert_called_once_with("mr fox Dahl")
+
+
+def test_candidates_without_a_search_hold_the_book_and_the_query_only():
+    service, _books, open_library = _service(isbn13="9780140328721")
+
+    candidates = service.candidates(BOOK, search=False)
+
+    assert candidates == CandidatesDTO(
+        book_id=BOOK, title="mr fox", authors=("Dahl",), query="mr fox Dahl", works=()
+    )
+    open_library.search.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -105,6 +122,7 @@ def test_a_pick_gives_the_book_what_the_work_holds():
     books.fill.assert_called_once_with(
         BOOK, {"title": "Fantastic Mr Fox", "authors": ["Roald Dahl"]}
     )
+    books.record_sync.assert_called_once_with(BOOK, SyncType.OPEN_LIBRARY)
 
 
 def test_a_pick_of_a_work_without_a_title_or_authors_fills_neither():

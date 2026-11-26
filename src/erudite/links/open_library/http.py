@@ -14,9 +14,10 @@ if TYPE_CHECKING:
 
 _SITE = "openlibrary.org"
 _COVERS = "covers.openlibrary.org"
-_FIELDS = "key,title,author_name,first_publish_year,cover_i,edition_count"
+_FIELDS = "key,title,author_name,first_publish_year,cover_i,edition_count,description"
 _LIMIT = 10
 _TIMEOUT = 20
+_ATTEMPTS = 3
 
 
 type _Json = dict[str, _Json] | list[_Json] | str | int | float | None
@@ -39,22 +40,15 @@ def _number(value: _Json) -> int | None:
     return value if isinstance(value, int) else None
 
 
-def _cover_path(cover_id: int, size: str) -> str:
-    return f"/b/id/{cover_id}-{size}.jpg"
-
-
 def _work(doc: dict[str, _Json]) -> WorkDTO:
-    cover_id = _number(doc.get("cover_i"))
     return WorkDTO(
         work_id=_text(doc.get("key")).removeprefix("/works/"),
         title=_text(doc.get("title")),
         authors=tuple(_text(name) for name in _items(doc.get("author_name"))),
         first_year=_number(doc.get("first_publish_year")),
-        cover_id=cover_id,
-        cover_url=(
-            f"https://{_COVERS}{_cover_path(cover_id, 'M')}" if cover_id else ""
-        ),
+        cover_id=_number(doc.get("cover_i")),
         edition_count=_number(doc.get("edition_count")) or 0,
+        description=_text(doc.get("description")),
     )
 
 
@@ -80,14 +74,18 @@ class OpenLibraryHttp(OpenLibraryProtocol):
 
     def _get(self, host: str, path: str) -> bytes:
         with self._lock:
-            time.sleep(max(0.0, self._last + self._interval - time.monotonic()))
-            try:
-                return _read(host, path)
-            except OSError as exc:
-                msg = f"Open Library gave no answer: {exc}"
-                raise OpenLibraryError(msg) from exc
-            finally:
-                self._last = time.monotonic()
+            # Open Library drops some connections: a failed request is sent again.
+            error: OSError | None = None
+            for _attempt in range(_ATTEMPTS):
+                time.sleep(max(0.0, self._last + self._interval - time.monotonic()))
+                try:
+                    return _read(host, path)
+                except OSError as exc:
+                    error = exc
+                finally:
+                    self._last = time.monotonic()
+            msg = f"Open Library gave no answer: {error}"
+            raise OpenLibraryError(msg) from error
 
     def _json(self, path: str) -> dict[str, _Json]:
         try:
@@ -114,4 +112,4 @@ class OpenLibraryHttp(OpenLibraryProtocol):
 
     @override
     def cover(self, cover_id: int) -> bytes:
-        return self._get(_COVERS, _cover_path(cover_id, "L"))
+        return self._get(_COVERS, f"/b/id/{cover_id}-L.jpg")

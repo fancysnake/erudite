@@ -6,7 +6,6 @@ from django import forms
 from django.contrib import admin
 from django.db.models import Count
 from django.forms import fields_for_model
-from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html_join
 from django.utils.text import capfirst
@@ -20,6 +19,7 @@ from erudite.links.db.django.models import (
     Decision,
     IgnoredExtension,
     RawBook,
+    Sync,
 )
 from erudite.links.db.django.repositories import BookRepository
 
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     RawBookAdminBase = admin.ModelAdmin[RawBook]
     IgnoredExtensionAdminBase = admin.ModelAdmin[IgnoredExtension]
     DecisionAdminBase = admin.ModelAdmin[Decision]
+    SyncAdminBase = admin.ModelAdmin[Sync]
     DecisionFormBase = forms.ModelForm[Decision]
     type Files = MultiValueDict[str, UploadedFile[bytes]]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
@@ -49,7 +50,7 @@ else:
     )
 
     AuthorAdminBase = BookAdminBase = RawBookAdminBase = ModelAdmin
-    IgnoredExtensionAdminBase = DecisionAdminBase = ModelAdmin
+    IgnoredExtensionAdminBase = DecisionAdminBase = SyncAdminBase = ModelAdmin
     DecisionFormBase = forms.ModelForm
     BookAuthorInlineBase = TabularInline
 
@@ -116,15 +117,6 @@ def _author_links(book: Book) -> SafeString:
     return _links("author", authors, separator=", ")
 
 
-@admin.action(description=_("Find the selected books on Open Library"))
-def _find_on_open_library(
-    _admin: BookAdminBase, _request: HttpRequest, queryset: QuerySet[Book]
-) -> HttpResponse:
-    """Open the picker for the first book; the rest wait in its queue."""
-    first, *rest = queryset.values_list("pk", flat=True)
-    return redirect(reverse("open_library", args=[first], query={"queue": rest}))
-
-
 @admin.register(Book)
 class BookAdmin(BookAdminBase):
     list_display = ("title", _author_links, "series", "series_position", "status")
@@ -132,8 +124,6 @@ class BookAdmin(BookAdminBase):
     list_filter = ("status", ("credits", admin.EmptyFieldListFilter))
     search_fields = ("title", "authors__name", "series", "isbn10", "isbn13")
     inlines = (BookAuthorInline,)
-
-    actions = (_find_on_open_library,)
 
     @override
     def get_queryset(self, request: HttpRequest) -> QuerySet[Book]:
@@ -156,6 +146,13 @@ class RawBookAdmin(RawBookAdminBase):
     @override
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
+
+
+@admin.register(Sync)
+class SyncAdmin(SyncAdminBase):
+    list_display = ("book", "sync_type", "time")
+    list_filter = ("sync_type", "time")
+    search_fields = ("book__title",)
 
 
 @admin.register(IgnoredExtension)

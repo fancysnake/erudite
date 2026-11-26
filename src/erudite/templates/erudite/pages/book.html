@@ -1,0 +1,52 @@
+{% extends "erudite/base.html" %}
+{% load i18n %}
+{% block title %}
+  {{ book.summary.title }}
+{% endblock title %}
+{% block content %}
+  <p>
+    <a href="{% url 'home' %}">{% translate "Back to the library" %}</a>
+  </p>
+  <h1>{{ book.summary.title }}</h1>
+  <div class="book">
+    {% if book.cover_url %}
+      <img class="book__cover" src="{{ book.cover_url }}" alt="" width="180">
+    {% else %}
+      <span class="book__cover">{% translate "No cover" %}</span>
+    {% endif %}
+    <div>
+      <dl class="facts">
+        <dt>{% translate "Authors" %}</dt>
+        <dd>
+          {{ book.summary.authors|join:", "|default:"—" }}
+        </dd>
+        <dt>{% translate "Series" %}</dt>
+        <dd>
+          {{ book.summary.series|default:"—" }}
+          {% if book.summary.series_position %}#{{ book.summary.series_position }}{% endif %}
+        </dd>
+        <dt>{% translate "Reading status" %}</dt>
+        <dd>
+          {{ book.summary.status }}
+        </dd>
+        <dt>{% translate "Open Library" %}</dt>
+        <dd>
+          {% if book.open_library_work %}
+            <a href="https://openlibrary.org/works/{{ book.open_library_work }}">{{ book.open_library_work }}</a>
+          {% else %}
+            {% translate "No work picked." %}
+          {% endif %}
+        </dd>
+      </dl>
+      {% if book.description %}
+        {{ book.description|linebreaks }}
+      {% else %}
+        <p>{% translate "No description." %}</p>
+      {% endif %}
+      <p class="actions">
+        <a href="{% url 'open_library' book.summary.book_id %}">{% translate "Find on Open Library" %}</a>
+        <a href="{% url 'admin:erudite_db_book_change' book.summary.book_id %}">{% translate "Edit in the admin" %}</a>
+      </p>
+    </div>
+  </div>
+{% endblock content %}

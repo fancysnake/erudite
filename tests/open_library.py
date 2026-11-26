@@ -12,6 +12,7 @@ FOX = {
     "first_publish_year": 1970,
     "cover_i": 6498519,
     "edition_count": 161,
+    "description": "A fox outwits\nthree farmers.",
 }
 # A work that has only what every work has.
 BARE_ID = "OL1W"
@@ -24,8 +25,8 @@ FOX_WORK = WorkDTO(
     authors=("Roald Dahl",),
     first_year=1970,
     cover_id=6498519,
-    cover_url="https://covers.openlibrary.org/b/id/6498519-M.jpg",
     edition_count=161,
+    description="A fox outwits\nthree farmers.",
 )
 BARE_WORK = WorkDTO(
     work_id=BARE_ID,
@@ -33,8 +34,8 @@ BARE_WORK = WorkDTO(
     authors=(),
     first_year=None,
     cover_id=None,
-    cover_url="",
     edition_count=1,
+    description="",
 )
 
 

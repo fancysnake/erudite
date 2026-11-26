@@ -35,6 +35,28 @@ class BookSource(StrEnum):
     FILE = "file"
 
 
+class SyncType(StrEnum):
+    """What gave values to a book. The first two are the values of `BookSource`."""
+
+    GOODREADS = "goodreads"
+    FILE = "file"
+    OPEN_LIBRARY = "open_library"
+
+
+class BookListQuery(TypedDict):
+    """What the user asks the book list for.
+
+    A book is listed when every sync of `done` reached it and no sync of `todo`
+    did.
+    """
+
+    query: str
+    page: int
+    size: int
+    done: tuple[SyncType, ...]
+    todo: tuple[SyncType, ...]
+
+
 class RawBookData(TypedDict):
     """One book as a source gives it; a field the source does not have is left out.
 
@@ -110,6 +132,54 @@ class SyncSummaryDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class BookSummaryDTO:
+    """A book as a list shows it. `status` is the label of the reading status."""
+
+    book_id: int
+    title: str
+    authors: tuple[str, ...]
+    series: str
+    series_position: str
+    status: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BookDTO:
+    """A book as its page shows it; empty where the book holds nothing."""
+
+    summary: BookSummaryDTO
+    description: str
+    # The address of the cover image.
+    cover_url: str
+    open_library_work: str
+
+
+# The numbers of books a page of the book list may show; the first is the default.
+PAGE_SIZES = (10, 25, 50, 100)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class BookListDTO:
+    """One page of the books a search found. `total` counts every book found."""
+
+    query: str
+    size: int
+    books: tuple[BookSummaryDTO, ...]
+    total: int
+    page: int
+    pages: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SyncProgressDTO:
+    """How far one sync is: it reached `done` of the `total` books."""
+
+    sync: SyncType
+    done: int
+    total: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WorkDTO:
     """A work at Open Library: one for all its editions. `work_id` is like OL45804W."""
 
@@ -118,9 +188,8 @@ class WorkDTO:
     authors: tuple[str, ...]
     first_year: int | None
     cover_id: int | None
-    # The address of a medium cover image for a page to show; empty without one.
-    cover_url: str
     edition_count: int
+    description: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -172,6 +241,29 @@ class GoodreadsExportProtocol(Protocol):
 class BookRepositoryProtocol(Protocol):
     def count(self) -> int: ...
 
+    def search(
+        self,
+        query: str,
+        *,
+        done: tuple[SyncType, ...] = (),
+        todo: tuple[SyncType, ...] = (),
+    ) -> list[BookSummaryDTO]:
+        """Return the books whose title, series or an author holds `query`.
+
+        An empty query finds every book. The books are in title order. A found
+        book has an entry in the sync log for each of `done` and for none of
+        `todo`.
+        """
+
+    def sync_counts(self) -> dict[SyncType, int]:
+        """Count, for each sync with an entry, the books it reached."""
+
+    def record_sync(self, book_id: int, sync: SyncType) -> None:
+        """Add to the sync log that `sync` gave values to the book now."""
+
+    def get(self, book_id: int) -> BookDTO:
+        """Return the book; `NotFoundError` if the library has no such book."""
+
     def keys(self, source: BookSource) -> set[str]:
         """Return the key of every raw book that `source` gave."""
 
@@ -179,7 +271,10 @@ class BookRepositoryProtocol(Protocol):
         """Map content hash to path for every raw book that is a file."""
 
     def create(self, books: list[RawBookData]) -> None:
-        """Add each of `books` as a raw book with a book of its own, or add none."""
+        """Add each of `books` as a raw book with a book of its own, or add none.
+
+        The sync log gets one entry for each book made.
+        """
 
     def move_file(self, content_hash: str, path: Path) -> None:
         """Point the raw book of the file with this content at `path`."""
@@ -232,7 +327,18 @@ class DiskBookFilesProtocol(Protocol):
 
 
 class LibraryServiceProtocol(Protocol):
-    def book_count(self) -> int: ...
+    def books(self, asked: BookListQuery) -> BookListDTO:
+        """Return the asked page of the books the query and the filters find.
+
+        The first page is 1. `NotFoundError` if the search has no such page, or
+        the size is not one of `PAGE_SIZES`.
+        """
+
+    def book(self, book_id: int) -> BookDTO:
+        """Return the book; `NotFoundError` if the library has no such book."""
+
+    def sync_progress(self) -> tuple[SyncProgressDTO, ...]:
+        """Return how far each sync is, over the whole library."""
 
     def import_goodreads(self, path: Path) -> SyncSummaryDTO:
         """Add the books of the export at `path` that the library does not hold."""
@@ -260,8 +366,13 @@ class ClassificationServiceProtocol(Protocol):
 
 
 class WorkServiceProtocol(Protocol):
-    def candidates(self, book_id: int, query: str | None = None) -> CandidatesDTO:
+    def candidates(
+        self, book_id: int, query: str | None = None, *, search: bool = True
+    ) -> CandidatesDTO:
         """Search Open Library for the works the book may be.
+
+        Without `search` nothing is sent and no work is found: the answer holds
+        the book and the query only.
 
         Without `query` the search is for the title and authors of the book, and
         the work of an ISBN the book holds comes first. `NotFoundError` if the
@@ -270,6 +381,8 @@ class WorkServiceProtocol(Protocol):
 
     def pick(self, book_id: int, work_id: str) -> None:
         """Give the book the title, authors, description and cover of the work.
+
+        The sync log gets an entry for the book.
 
         `NotFoundError` if the library has no such book or Open Library no such
         work; `OpenLibraryError` if the work cannot be read.
