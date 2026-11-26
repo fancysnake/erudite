@@ -111,20 +111,17 @@ class BookRepository(BookRepositoryProtocol):
 
     @override
     def fill_empty(self, book_id: int, values: BookFieldsData) -> bool:
-        scalars = {name: value for name, value in values.items() if name != "authors"}
         empty = Book.objects.filter(
-            pk=book_id, decision__isnull=True, **dict.fromkeys(scalars, "")
+            pk=book_id,
+            decision__isnull=True,
+            **dict.fromkeys(values.keys() - {"authors"}, ""),
         )
         if "authors" in values:
             empty = empty.filter(credits__isnull=True)
         with transaction.atomic():
-            # The update checks and writes in one statement: no save comes between.
-            # shortcut: authors alone are checked, then written; a save between
-            # the two fails as a locked database. Upgrade if that error shows up.
-            if not (empty.update(**scalars) if scalars else empty.exists()):
+            if not empty.exists():
                 return False
-            if "authors" in values:
-                _credit({book_id: values["authors"]})
+            self.fill(book_id, values)
         return True
 
 

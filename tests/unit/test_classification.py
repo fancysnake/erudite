@@ -38,13 +38,13 @@ def test_a_proposal_for_fields_the_book_does_not_hold_is_filled_at_once():
 
 def test_a_proposal_for_a_field_the_book_holds_fills_nothing_and_waits():
     service, books, decisions = _service()
+    books.fill_empty.return_value = False
     proposal = {"title": "Dune", "authors": ["Frank Herbert"]}
 
     outcome = service.propose(BOOK, proposal)
 
     assert outcome == ProposalOutcome.WAITING
     decisions.create.assert_called_once_with(BOOK, proposal)
-    books.fill_empty.assert_not_called()
 
 
 def test_a_proposal_waits_when_the_book_got_one_of_its_fields_after_the_read():
@@ -60,12 +60,12 @@ def test_a_proposal_waits_when_the_book_got_one_of_its_fields_after_the_read():
 
 def test_a_proposal_is_skipped_when_a_decision_came_to_wait_after_the_check():
     service, books, decisions = _service()
+    books.fill_empty.return_value = False
     decisions.create.return_value = False
 
     outcome = service.propose(BOOK, {"title": "Dune"})
 
     assert outcome == ProposalOutcome.ALREADY_WAITING
-    books.fill_empty.assert_not_called()
 
 
 def test_a_book_with_a_waiting_decision_is_left_alone():

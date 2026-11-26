@@ -1,7 +1,8 @@
 from pathlib import Path
 
 import pytest
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
+from django.test.utils import CaptureQueriesContext
 
 from erudite.links.db.django.models import (
     Author,
@@ -265,6 +266,16 @@ def test_filling_the_empty_fields_writes_nothing_when_a_decision_waits():
     book.refresh_from_db()
     assert not book.series
     assert not _authors(book)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_fill_takes_the_write_lock_before_it_reads():
+    book = Book.objects.create(title="Good Omens")
+
+    with CaptureQueriesContext(connection) as queries:
+        BookRepository().fill_empty(book.pk, {"authors": ["Neil Gaiman"]})
+
+    assert queries[0]["sql"] == "BEGIN IMMEDIATE"
 
 
 def test_a_decision_waits_for_its_book_only_and_one_book_holds_one():
