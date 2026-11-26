@@ -1,7 +1,8 @@
 from pathlib import Path
 
 import pytest
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
+from django.test.utils import CaptureQueriesContext
 
 from erudite.links.db.django.models import (
     Author,
@@ -196,6 +197,87 @@ def test_filling_the_authors_replaces_them_in_the_given_order_each_once():
     assert Author.objects.count() == len(_authors(book))
 
 
+def test_filling_the_empty_fields_of_a_book_writes_them_and_its_authors():
+    book = Book.objects.create(title="Good Omens")
+
+    filled = BookRepository().fill_empty(
+        book.pk, {"isbn13": "9780552137034", "authors": ["Terry Pratchett"]}
+    )
+
+    assert filled
+    book.refresh_from_db()
+    assert book.isbn13 == "9780552137034"
+    assert _authors(book) == ["Terry Pratchett"]
+
+
+def test_filling_only_the_authors_of_a_book_without_authors_writes_them():
+    book = Book.objects.create(title="Good Omens")
+
+    assert BookRepository().fill_empty(book.pk, {"authors": ["Neil Gaiman"]})
+
+    assert _authors(book) == ["Neil Gaiman"]
+
+
+def test_filling_an_empty_field_alone_leaves_the_book_without_authors():
+    book = Book.objects.create(title="Mort")
+
+    assert BookRepository().fill_empty(book.pk, {"series": "Discworld"})
+
+    book.refresh_from_db()
+    assert book.series == "Discworld"
+    assert not _authors(book)
+
+
+def test_filling_the_empty_fields_writes_nothing_when_the_book_holds_one():
+    book = _mort()
+
+    filled = BookRepository().fill_empty(
+        book.pk, {"isbn13": "9780552131063", "series": "Death"}
+    )
+
+    assert not filled
+    assert list(Book.objects.values_list("isbn13", "series")) == [
+        (MORT_BOOK["isbn13"], MORT_BOOK["series"])
+    ]
+
+
+def test_filling_the_empty_fields_writes_nothing_when_the_book_has_authors():
+    book = _mort()
+    Book.objects.update(isbn13="")
+
+    filled = BookRepository().fill_empty(
+        book.pk, {"isbn13": "9780552131063", "authors": ["Neil Gaiman"]}
+    )
+
+    assert not filled
+    book.refresh_from_db()
+    assert not book.isbn13
+    assert _authors(book) == ["Terry Pratchett"]
+
+
+def test_filling_the_empty_fields_writes_nothing_when_a_decision_waits():
+    book = Book.objects.create(title="scan_0042")
+    Decision.objects.create(book=book, proposed={"title": "Dune"})
+    repository = BookRepository()
+
+    assert not repository.fill_empty(book.pk, {"series": "Dune"})
+    assert not repository.fill_empty(book.pk, {"authors": ["Frank Herbert"]})
+
+    book.refresh_from_db()
+    assert not book.series
+    assert not _authors(book)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_fill_takes_the_write_lock_before_it_reads():
+    book = Book.objects.create(title="Good Omens")
+
+    with CaptureQueriesContext(connection) as queries:
+        BookRepository().fill_empty(book.pk, {"authors": ["Neil Gaiman"]})
+
+    assert queries[0]["sql"] == "BEGIN IMMEDIATE"
+
+
 def test_a_decision_waits_for_its_book_only_and_one_book_holds_one():
     BookRepository().create([MORT_BOOK, SOURCERY])
     mort, sourcery = Book.objects.all()
@@ -206,5 +288,13 @@ def test_a_decision_waits_for_its_book_only_and_one_book_holds_one():
     assert repository.exists(mort.pk)
     assert not repository.exists(sourcery.pk)
     assert str(Decision.objects.get()) == "Mort"
-    with pytest.raises(IntegrityError):
-        repository.create(mort.pk, {"title": "Mort?"})
+
+
+def test_a_second_decision_for_a_book_is_not_stored_and_the_first_stays():
+    book = _mort()
+    repository = DecisionRepository()
+
+    assert repository.create(book.pk, {"title": "Mort!"})
+    assert not repository.create(book.pk, {"title": "Mort?"})
+
+    assert Decision.objects.get().proposed == {"title": "Mort!"}
