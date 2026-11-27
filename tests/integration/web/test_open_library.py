@@ -72,7 +72,7 @@ def test_the_picker_keeps_the_typed_search_and_the_queue(staff, book, *, open_li
     assert [t.name for t in response.templates] == TEMPLATES
     assert not open_library.requests
     assert response.context["candidates"].query == "fantastic fox"
-    assert response.context["queue"] == ["5", "6"]
+    assert response.context["queue"] == [5, 6]
     assert response.context["after"] == "/books/5/open-library/?queue=6"
     assert 'value="fantastic fox"' in response.text
     assert (
@@ -174,7 +174,7 @@ def test_a_pick_writes_the_work_to_the_book(staff, book, *, open_library):
     book.refresh_from_db()
     assert book.title == "Fantastic Mr Fox"
     assert [str(credit) for credit in book.credits.all()] == ["Roald Dahl"]
-    assert book.description == "A fox outwits three farmers."
+    assert book.description == "A fox outwits\nthree farmers."
     assert book.open_library_work == FOX_ID
     assert book.cover.name == f"covers/{book.pk}.jpg"
     assert book.cover.read() == COVER
@@ -189,7 +189,7 @@ def test_a_pick_writes_the_work_to_the_book(staff, book, *, open_library):
     (
         ("queue=5&queue=6", "/books/5/open-library/?queue=6"),
         ("queue=5", "/books/5/open-library/"),
-        ("queue=x", None),
+        ("", None),
     ),
 )
 def test_a_pick_leads_to_the_next_book_of_the_queue(
@@ -201,6 +201,20 @@ def test_a_pick_leads_to_the_next_book_of_the_queue(
 
     assert response.status_code == HTTPStatus.FOUND
     assert response.url == (target or f"/books/{book.pk}/")
+
+
+@pytest.mark.parametrize("method", ("get", "post"))
+@pytest.mark.parametrize("queue", ("queue=x", "queue=5&queue=x", "queue=-5"))
+def test_a_queue_that_names_no_books_is_not_found(
+    staff, book, *, open_library, method, queue
+):
+    # Data sent with a GET replaces the query of the address.
+    data = {"work": FOX_ID} if method == "post" else None
+
+    response = getattr(staff, method)(_url(book, f"?{queue}"), data)
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert not open_library.requests
 
 
 @pytest.mark.usefixtures("open_library")

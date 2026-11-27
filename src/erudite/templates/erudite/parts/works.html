@@ -9,9 +9,9 @@
 <ul class="works">
   {% for work in candidates.works %}
     <li class="work">
-      {% if work.cover_id %}
+      {% if work.cover %}
         <img class="work__cover"
-             src="https://covers.openlibrary.org/b/id/{{ work.cover_id }}-M.jpg"
+             src="{{ work.cover.url }}"
              alt=""
              width="90"
              height="135"

@@ -13,11 +13,13 @@ from erudite.links.db.django.repositories import (
     SyncRepository,
 )
 from erudite.links.goodreads.csv import GoodreadsCsvExport
-from erudite.links.open_library.http import OpenLibraryHttp
+from erudite.links.web.https import HttpsWebFiles
+from erudite.links.web.open_library import OpenLibraryHttp
 from erudite.mills import (
     BookFilesService,
     ClassificationService,
     LibraryService,
+    VendorService,
     WorkService,
 )
 from erudite.pacts import RootRequestProtocol, ServicesProtocol
@@ -61,6 +63,10 @@ class Services(ServicesProtocol):
             open_library=OPEN_LIBRARY,
             transaction=transaction,
         )
+
+    @cached_property
+    def vendor(self) -> VendorService:
+        return VendorService(web=HttpsWebFiles())
 
 
 class ServiceInjectionMiddleware[Response]:

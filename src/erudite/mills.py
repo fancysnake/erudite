@@ -2,6 +2,7 @@
 
 import math
 from typing import TYPE_CHECKING, override
+from urllib.parse import urlsplit, urlunsplit
 
 from erudite.pacts import (
     BOOK_FIELDS,
@@ -12,6 +13,7 @@ from erudite.pacts import (
     BookSource,
     CandidatesDTO,
     ClassificationServiceProtocol,
+    DownloadError,
     LibraryServiceProtocol,
     NotFoundError,
     OpenLibraryError,
@@ -21,6 +23,7 @@ from erudite.pacts import (
     SyncProgressDTO,
     SyncSummaryDTO,
     SyncType,
+    VendorServiceProtocol,
     WorkServiceProtocol,
 )
 from erudite.specs import WORK_ID
@@ -39,6 +42,7 @@ if TYPE_CHECKING:
         OpenLibraryProtocol,
         SyncRepositoryProtocol,
         TransactionProtocol,
+        WebFilesProtocol,
         WorkDTO,
     )
 
@@ -245,11 +249,9 @@ class WorkService(WorkServiceProtocol):
             msg = f"Open Library has no work {work_id}."
             raise NotFoundError(msg)
         work = found[0]
-        cover = self._open_library.cover(work.cover_id) if work.cover_id else None
+        cover = self._open_library.cover(work.cover.cover_id) if work.cover else None
         picked = PickedWorkData(
-            work_id=work_id,
-            description=self._open_library.description(work_id),
-            cover=cover,
+            work_id=work_id, description=work.description, cover=cover
         )
         # An empty title or no author changes nothing.
         values = BookFieldsData()
@@ -261,3 +263,17 @@ class WorkService(WorkServiceProtocol):
             self._books.set_work(book_id, picked)
             self._books.fill(book_id, values)
             self._syncs.record(book_id, SyncType.OPEN_LIBRARY)
+
+
+class VendorService(VendorServiceProtocol):
+    def __init__(self, *, web: WebFilesProtocol) -> None:
+        self._web = web
+
+    @override
+    def download(self, url: str) -> bytes:
+        address = urlsplit(url)
+        if address.scheme != "https":
+            msg = f"{url} is not an HTTPS address."
+            raise DownloadError(msg)
+        path = urlunsplit(("", "", address.path, address.query, ""))
+        return self._web.read(address.netloc, path)

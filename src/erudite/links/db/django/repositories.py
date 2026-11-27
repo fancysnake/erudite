@@ -137,7 +137,7 @@ class BookRepository(BookRepositoryProtocol):
                 for book, raw in zip(created, books, strict=True)
             )
             Sync.objects.bulk_create(
-                Sync(book=book, sync_type=raw["source"])
+                Sync(book=book, sync_type=SyncType(raw["source"]))
                 for book, raw in zip(created, books, strict=True)
             )
 

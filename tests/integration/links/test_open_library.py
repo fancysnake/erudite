@@ -6,10 +6,10 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from erudite.links.open_library import http
-from erudite.links.open_library.http import OpenLibraryHttp
+from erudite.links.web import https
+from erudite.links.web.open_library import OpenLibraryHttp
 from erudite.pacts import OpenLibraryError
-from tests.open_library import BARE, BARE_WORK, COVER, FOX, FOX_ID, FOX_WORK
+from tests.open_library import BARE, BARE_WORK, COVER, FOX, FOX_WORK
 
 
 def test_a_search_gives_the_works_found_best_first(open_library):
@@ -40,22 +40,6 @@ def test_a_search_sends_the_query_and_no_contact_detail(open_library):
     assert request.header_items() == [("User-agent", "erudite")]
 
 
-@pytest.mark.parametrize(
-    ("work", "description"),
-    (
-        ({"description": "A fox."}, "A fox."),
-        ({"description": {"type": "/type/text", "value": "A fox."}}, "A fox."),
-        ({}, ""),
-    ),
-)
-def test_the_description_of_a_work_is_its_text(open_library, *, work, description):
-    open_library.work = work
-
-    assert OpenLibraryHttp().description(FOX_ID) == description
-    (request,) = open_library.requests
-    assert request.full_url == f"https://openlibrary.org/works/{FOX_ID}.json"
-
-
 def test_a_cover_is_the_large_image(open_library):
     assert OpenLibraryHttp().cover(6498519) == COVER
     (request,) = open_library.requests
@@ -74,7 +58,7 @@ def test_a_request_that_fails_is_sent_again(monkeypatch):
     urlopen = MagicMock(
         side_effect=[ConnectionResetError(104, "reset"), BytesIO(COVER)]
     )
-    monkeypatch.setattr(http, "urlopen", urlopen)
+    monkeypatch.setattr(https, "urlopen", urlopen)
 
     assert OpenLibraryHttp(interval=0).cover(1) == COVER
     assert urlopen.call_count == 2

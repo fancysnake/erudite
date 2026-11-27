@@ -19,7 +19,7 @@ FILM = WorkDTO(
     title="Fantastic Mr. Fox",
     authors=("Wes Anderson",),
     first_year=2016,
-    cover_id=None,
+    cover=None,
     edition_count=1,
     description="",
 )
@@ -106,19 +106,17 @@ def test_an_empty_search_asks_open_library_nothing():
 
 def test_a_pick_gives_the_book_what_the_work_holds():
     service, books, open_library = _service(found=[[FOX]])
-    open_library.description.return_value = "A fox outwits three farmers."
     open_library.cover.return_value = b"a JPEG"
 
     service.pick(BOOK, FOX.work_id)
 
     open_library.search.assert_called_once_with("key:/works/OL45804W")
-    open_library.description.assert_called_once_with(FOX.work_id)
-    open_library.cover.assert_called_once_with(FOX.cover_id)
+    open_library.cover.assert_called_once_with(6498519)
     books.set_work.assert_called_once_with(
         BOOK,
         {
             "work_id": FOX.work_id,
-            "description": "A fox outwits three farmers.",
+            "description": "A fox outwits\nthree farmers.",
             "cover": b"a JPEG",
         },
     )

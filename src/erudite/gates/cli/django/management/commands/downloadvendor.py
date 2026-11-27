@@ -1,35 +1,21 @@
 import base64
 import hashlib
 from typing import TYPE_CHECKING, override
-from urllib.request import Request, urlopen
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from erudite.gates.cli.django.services import build_services
+from erudite.pacts import DownloadError
+
 if TYPE_CHECKING:
     from argparse import ArgumentParser
-    from http.client import HTTPResponse
     from pathlib import Path
-
-_TIMEOUT = 30
 
 
 def _sha384(content: bytes) -> str:
     """Hash as an SRI attribute writes it: base64."""
     return base64.b64encode(hashlib.sha384(content).digest()).decode("ascii")
-
-
-def _download(url: str) -> bytes:
-    # `urlopen` is typed as `Any`: the declaration gives the answer its type.
-    answer: HTTPResponse
-    with urlopen(
-        # Any other scheme becomes a host that does not resolve.
-        Request(
-            f"https://{url.removeprefix('https://')}", headers={"User-Agent": "erudite"}
-        ),
-        timeout=_TIMEOUT,
-    ) as answer:
-        return answer.read()
 
 
 class Command(BaseCommand):
@@ -89,8 +75,8 @@ class Command(BaseCommand):
             self.stdout.write(f"{name}: Would download from {url}")
             return "downloaded"
         try:
-            content = _download(url)
-        except OSError as exc:
+            content = build_services().vendor.download(url)
+        except DownloadError as exc:
             self.stdout.write(self.style.ERROR(f"{name}: Download failed - {exc}"))
             return "failed"
         if (actual := _sha384(content)) != expected:

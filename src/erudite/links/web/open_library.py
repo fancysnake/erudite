@@ -1,16 +1,13 @@
-"""Open Library over HTTPS: the search, the works and the cover images."""
+"""Open Library over HTTPS: the search and the cover images."""
 
 import json
 import threading
 import time
-from typing import TYPE_CHECKING, override
+from typing import override
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-from erudite.pacts import OpenLibraryError, OpenLibraryProtocol, WorkDTO
-
-if TYPE_CHECKING:
-    from http.client import HTTPResponse
+from erudite.links.web import https
+from erudite.pacts import CoverDTO, OpenLibraryError, OpenLibraryProtocol, WorkDTO
 
 _SITE = "openlibrary.org"
 _COVERS = "covers.openlibrary.org"
@@ -40,26 +37,27 @@ def _number(value: _Json) -> int | None:
     return value if isinstance(value, int) else None
 
 
+def _cover_path(cover_id: int, size: str) -> str:
+    return f"/b/id/{cover_id}-{size}.jpg"
+
+
 def _work(doc: dict[str, _Json]) -> WorkDTO:
+    cover_id = _number(doc.get("cover_i"))
     return WorkDTO(
         work_id=_text(doc.get("key")).removeprefix("/works/"),
         title=_text(doc.get("title")),
         authors=tuple(_text(name) for name in _items(doc.get("author_name"))),
         first_year=_number(doc.get("first_publish_year")),
-        cover_id=_number(doc.get("cover_i")),
+        cover=(
+            CoverDTO(
+                cover_id=cover_id, url=f"https://{_COVERS}{_cover_path(cover_id, 'M')}"
+            )
+            if cover_id
+            else None
+        ),
         edition_count=_number(doc.get("edition_count")) or 0,
         description=_text(doc.get("description")),
     )
-
-
-def _read(host: str, path: str) -> bytes:
-    # `urlopen` is typed as `Any`: the declaration gives the answer its type.
-    answer: HTTPResponse
-    with urlopen(
-        Request(f"https://{host}{path}", headers={"User-Agent": "erudite"}),
-        timeout=_TIMEOUT,
-    ) as answer:
-        return answer.read()
 
 
 class OpenLibraryHttp(OpenLibraryProtocol):
@@ -79,7 +77,7 @@ class OpenLibraryHttp(OpenLibraryProtocol):
             for _attempt in range(_ATTEMPTS):
                 time.sleep(max(0.0, self._last + self._interval - time.monotonic()))
                 try:
-                    return _read(host, path)
+                    return https.read(host, path, timeout=_TIMEOUT)
                 except OSError as exc:
                     error = exc
                 finally:
@@ -105,11 +103,5 @@ class OpenLibraryHttp(OpenLibraryProtocol):
         return [_work(_fields(doc)) for doc in docs]
 
     @override
-    def description(self, work_id: str) -> str:
-        text = self._json(f"/works/{work_id}.json").get("description")
-        # Open Library gives the text bare, or wrapped together with its type.
-        return _text(text) or _text(_fields(text).get("value"))
-
-    @override
     def cover(self, cover_id: int) -> bytes:
-        return self._get(_COVERS, f"/b/id/{cover_id}-L.jpg")
+        return self._get(_COVERS, _cover_path(cover_id, "L"))

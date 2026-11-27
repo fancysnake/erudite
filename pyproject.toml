@@ -388,7 +388,6 @@ ignore_names = [
     "verbose_name",
     "verbose_name_plural",
     # Django admin options, read by the admin site
-    "actions",
     "autocomplete_fields",
     "extra",
     "fields",
@@ -412,10 +411,6 @@ ignore_names = [
     "isbn13",
     "rating",
     "series_position",
-    # A book column that later work matches by, and DTO fields only a template reads
-    "edition_count",
-    "first_year",
-    "open_library_work",
 ]
 ignore_decorators = ["@admin.register", "@override"]
 sort_by_size = true

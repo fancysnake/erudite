@@ -3,7 +3,8 @@ import csv
 import pytest
 
 from erudite import inits
-from erudite.links.open_library import http
+from erudite.links.web import https
+from erudite.links.web.open_library import OpenLibraryHttp
 from tests.goodreads import GOODREADS_COLUMNS
 from tests.open_library import FakeOpenLibrary
 
@@ -33,6 +34,6 @@ def media_fixture(settings, tmp_path):
 def open_library_fixture(monkeypatch):
     """Answer for Open Library, without the wait between two requests."""
     fake = FakeOpenLibrary()
-    monkeypatch.setattr(http, "urlopen", fake)
-    monkeypatch.setattr(inits, "OPEN_LIBRARY", http.OpenLibraryHttp(interval=0))
+    monkeypatch.setattr(https, "urlopen", fake)
+    monkeypatch.setattr(inits, "OPEN_LIBRARY", OpenLibraryHttp(interval=0))
     return fake

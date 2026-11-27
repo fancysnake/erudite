@@ -30,6 +30,10 @@ class OpenLibraryError(Exception):
     """Open Library gave no answer, or one that cannot be read."""
 
 
+class DownloadError(Exception):
+    """A file cannot be downloaded."""
+
+
 class BookSource(StrEnum):
     GOODREADS = "goodreads"
     FILE = "file"
@@ -180,6 +184,14 @@ class SyncProgressDTO:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class CoverDTO:
+    """A cover image at Open Library. `url` is the address of its medium size."""
+
+    cover_id: int
+    url: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WorkDTO:
     """A work at Open Library: one for all its editions. `work_id` is like OL45804W."""
 
@@ -187,7 +199,7 @@ class WorkDTO:
     title: str
     authors: tuple[str, ...]
     first_year: int | None
-    cover_id: int | None
+    cover: CoverDTO | None
     edition_count: int
     description: str
 
@@ -221,11 +233,16 @@ class OpenLibraryProtocol(Protocol):
     def search(self, query: str) -> list[WorkDTO]:
         """Return the first works Open Library finds for `query`, best first."""
 
-    def description(self, work_id: str) -> str:
-        """Return the description of the work; empty if it has none."""
-
     def cover(self, cover_id: int) -> bytes:
         """Return the cover image, a JPEG."""
+
+
+class WebFilesProtocol(Protocol):
+    def read(self, host: str, path: str) -> bytes:
+        """Return the file at `path` of `host`, asked over HTTPS.
+
+        `DownloadError` if it cannot be read.
+        """
 
 
 class TransactionProtocol(Protocol):
@@ -390,7 +407,8 @@ class WorkServiceProtocol(Protocol):
 
         Without `query` the search is for the title and authors of the book, and
         the work of an ISBN the book holds comes first. `NotFoundError` if the
-        library has no such book; `OpenLibraryError` if the search fails.
+        library has no such book. A failed search raises nothing: the answer
+        holds its message in `failure` and the works found before it.
         """
 
     def pick(self, book_id: int, work_id: str) -> None:
@@ -400,6 +418,14 @@ class WorkServiceProtocol(Protocol):
 
         `NotFoundError` if the library has no such book or Open Library no such
         work; `OpenLibraryError` if the work cannot be read.
+        """
+
+
+class VendorServiceProtocol(Protocol):
+    def download(self, url: str) -> bytes:
+        """Return the file at `url`.
+
+        `DownloadError` if `url` is not an HTTPS address or the file cannot be read.
         """
 
 
@@ -417,6 +443,9 @@ class ServicesProtocol(Protocol):
 
     @property
     def works(self) -> WorkServiceProtocol: ...
+
+    @property
+    def vendor(self) -> VendorServiceProtocol: ...
 
 
 class RootRequestProtocol(Protocol):

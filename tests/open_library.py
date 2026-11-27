@@ -2,7 +2,7 @@ import json
 from io import BytesIO
 from urllib.parse import parse_qs, urlsplit
 
-from erudite.pacts import WorkDTO
+from erudite.pacts import CoverDTO, WorkDTO
 
 FOX_ID = "OL45804W"
 FOX = {
@@ -24,7 +24,9 @@ FOX_WORK = WorkDTO(
     title="Fantastic Mr Fox",
     authors=("Roald Dahl",),
     first_year=1970,
-    cover_id=6498519,
+    cover=CoverDTO(
+        cover_id=6498519, url="https://covers.openlibrary.org/b/id/6498519-M.jpg"
+    ),
     edition_count=161,
     description="A fox outwits\nthree farmers.",
 )
@@ -33,7 +35,7 @@ BARE_WORK = WorkDTO(
     title="Untitled",
     authors=(),
     first_year=None,
-    cover_id=None,
+    cover=None,
     edition_count=1,
     description="",
 )
@@ -42,13 +44,12 @@ BARE_WORK = WorkDTO(
 class FakeOpenLibrary:
     """Stands in for `urlopen`: answers by path and keeps every request.
 
-    `searches` maps a query to the works found for it; `work` is the record of
-    every work; `error` is raised in place of an answer.
+    `searches` maps a query to the works found for it; `error` is raised in
+    place of an answer.
     """
 
     def __init__(self):
         self.searches = {}
-        self.work = {"description": "A fox outwits three farmers."}
         self.error = None
         self.requests = []
 
@@ -68,6 +69,4 @@ class FakeOpenLibrary:
         if url.path == "/search.json":
             docs = self.searches.get(parse_qs(url.query)["q"][0], [])
             return BytesIO(json.dumps({"docs": docs}).encode())
-        if url.path.startswith("/works/"):
-            return BytesIO(json.dumps(self.work).encode())
         return BytesIO(COVER)

@@ -7,7 +7,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from erudite.gates.cli.django.management.commands import downloadvendor
+from erudite.links.web import https
 
 JS = b"console.log('hello');"
 CSS = b"body { color: red; }"
@@ -48,7 +48,7 @@ def cdn_fixture(monkeypatch):
             raise answer
         return BytesIO(answer)
 
-    monkeypatch.setattr(downloadvendor, "urlopen", fake)
+    monkeypatch.setattr(https, "urlopen", fake)
     answers["requests"] = requests
     return answers
 
@@ -76,11 +76,15 @@ def test_a_filename_with_a_directory_gets_the_directory(settings, vendor_dir, *,
 
 def test_a_url_is_asked_over_https_only(settings, vendor_dir, *, cdn):
     settings.VENDOR_DEPENDENCIES[0]["url"] = "file:///etc/hosts"
-    cdn["https://file:///etc/hosts"] = URLError("no such host")
+    out = StringIO()
 
     with pytest.raises(CommandError):
-        _run()
+        call_command("downloadvendor", stdout=out)
 
+    assert (
+        "lib.min.js: Download failed - file:///etc/hosts is not an HTTPS address."
+    ) in out.getvalue()
+    assert not cdn["requests"]
     assert not vendor_dir.exists()
 
 
