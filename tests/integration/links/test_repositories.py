@@ -1,3 +1,4 @@
+import datetime as dt
 from pathlib import Path
 
 import pytest
@@ -10,13 +11,22 @@ from erudite.links.db.django.models import (
     Decision,
     IgnoredExtension,
     RawBook,
+    Sync,
 )
 from erudite.links.db.django.repositories import (
     BookRepository,
     DecisionRepository,
     IgnoredExtensions,
+    SyncRepository,
 )
-from erudite.pacts import BookSource, NotFoundError, ReadingStatus
+from erudite.pacts import (
+    BookDTO,
+    BookSource,
+    BookSummaryDTO,
+    NotFoundError,
+    ReadingStatus,
+    SyncType,
+)
 from tests.goodreads import MORT_BOOK
 
 pytestmark = pytest.mark.django_db
@@ -288,6 +298,169 @@ def test_a_decision_waits_for_its_book_only_and_one_book_holds_one():
     assert repository.exists(mort.pk)
     assert not repository.exists(sourcery.pk)
     assert str(Decision.objects.get()) == "Mort"
+
+
+def _picked(**values):
+    return {
+        "work_id": "OL45804W",
+        "description": "A fox outwits three farmers.",
+        "cover": b"a JPEG",
+    } | values
+
+
+@pytest.mark.usefixtures("media")
+def test_a_picked_work_replaces_the_description_and_cover():
+    BookRepository().create([MORT_BOOK])
+    book = Book.objects.get()
+    BookRepository().set_work(book.pk, _picked(cover=b"an old JPEG"))
+
+    BookRepository().set_work(book.pk, _picked())
+
+    book.refresh_from_db()
+    assert book.title == MORT_BOOK["title"]
+    assert book.description == "A fox outwits three farmers."
+    assert book.open_library_work == "OL45804W"
+    assert book.cover.name == f"covers/{book.pk}.jpg"
+    assert book.cover.read() == b"a JPEG"
+    assert book.isbn13 == MORT_BOOK["isbn13"]
+
+
+@pytest.mark.usefixtures("media")
+def test_a_picked_work_changes_nothing_where_it_holds_nothing():
+    BookRepository().create([MORT_BOOK])
+    book = Book.objects.get()
+    BookRepository().set_work(book.pk, _picked())
+
+    BookRepository().set_work(book.pk, _picked(description="", cover=None))
+
+    book.refresh_from_db()
+    assert book.description == "A fox outwits three farmers."
+    assert book.cover.read() == b"a JPEG"
+
+
+def test_a_picked_work_for_a_book_the_library_lacks_is_not_found():
+    with pytest.raises(NotFoundError, match="no book 404"):
+        BookRepository().set_work(404, _picked())
+
+
+@pytest.mark.parametrize(
+    ("query", "titles"),
+    (
+        ("", ["Good Omens", "Mort", "dune"]),
+        ("OMENS", ["Good Omens"]),
+        ("discworld", ["Mort"]),
+        ("pratchett", ["Good Omens", "Mort"]),
+        ("terry", ["Good Omens", "Mort"]),
+        ("hobbit", []),
+    ),
+)
+def test_a_search_finds_books_by_title_series_or_author_in_title_order(
+    *, query, titles
+):
+    BookRepository().create([MORT_BOOK, GOOD_OMENS, DUNE_FILE])
+
+    found = BookRepository().search(query)
+
+    assert [book.title for book in found] == titles
+
+
+def test_a_search_gives_each_book_as_a_list_shows_it():
+    BookRepository().create([GOOD_OMENS])
+
+    (found,) = BookRepository().search("")
+
+    assert found == BookSummaryDTO(
+        book_id=Book.objects.get().pk,
+        title="Good Omens",
+        authors=("Terry Pratchett", "Neil Gaiman"),
+        series="",
+        series_position="",
+        status="Read",
+    )
+
+
+@pytest.mark.usefixtures("media")
+def test_a_book_is_given_with_its_description_cover_and_work():
+    book = Book.objects.create(title="Mort", description="Death takes an apprentice.")
+    BookRepository().set_work(
+        book.pk, {"work_id": "OL1W", "description": "", "cover": b"a JPEG"}
+    )
+
+    assert BookRepository().get(book.pk) == BookDTO(
+        summary=BookSummaryDTO(
+            book_id=book.pk,
+            title="Mort",
+            authors=(),
+            series="",
+            series_position="",
+            status="To read",
+        ),
+        description="Death takes an apprentice.",
+        cover_url=f"/media/covers/{book.pk}.jpg",
+        open_library_work="OL1W",
+    )
+    assert not BookRepository().get(Book.objects.create(title="dune").pk).cover_url
+
+
+def test_a_book_the_library_lacks_cannot_be_given():
+    with pytest.raises(NotFoundError, match="no book 404"):
+        BookRepository().get(404)
+
+
+def test_a_new_book_gets_an_entry_in_the_sync_log_for_its_source():
+    BookRepository().create([MORT_BOOK, DUNE_FILE])
+
+    assert set(Sync.objects.values_list("book__title", "sync_type")) == {
+        ("Mort", "goodreads"),
+        ("dune", "file"),
+    }
+    assert str(Sync.objects.get(sync_type="file")) == "File scan: dune"
+
+
+def test_a_recorded_sync_is_an_entry_with_the_time_of_now():
+    book = Book.objects.create(title="Mort")
+    before = dt.datetime.now(dt.UTC)
+
+    SyncRepository().record(book.pk, SyncType.OPEN_LIBRARY)
+
+    sync = Sync.objects.get()
+    assert (sync.book, sync.sync_type) == (book, "open_library")
+    assert before <= sync.time <= dt.datetime.now(dt.UTC)
+
+
+@pytest.mark.parametrize(
+    ("filters", "titles"),
+    (
+        ({}, ["Dune", "Emma", "Mort"]),
+        ({"done": (SyncType.OPEN_LIBRARY,)}, ["Dune", "Mort"]),
+        ({"done": (SyncType.OPEN_LIBRARY, SyncType.FILE)}, ["Mort"]),
+        ({"done": (SyncType.GOODREADS,)}, []),
+        ({"todo": (SyncType.OPEN_LIBRARY,)}, ["Emma"]),
+        ({"todo": (SyncType.FILE,)}, ["Dune", "Emma"]),
+        ({"done": (SyncType.OPEN_LIBRARY,), "todo": (SyncType.FILE,)}, ["Dune"]),
+    ),
+)
+def test_a_search_keeps_the_books_some_syncs_reached_and_others_did_not(
+    *, filters, titles
+):
+    dune, mort = Book.objects.create(title="Dune"), Book.objects.create(title="Mort")
+    Book.objects.create(title="Emma")
+    Sync.objects.create(book=dune, sync_type="open_library")
+    Sync.objects.create(book=mort, sync_type="file")
+    Sync.objects.create(book=mort, sync_type="open_library")
+
+    found = BookRepository().search("", **filters)
+
+    assert [book.title for book in found] == titles
+
+
+def test_the_sync_counts_are_the_books_each_sync_reached_once():
+    dune, mort = Book.objects.create(title="Dune"), Book.objects.create(title="Mort")
+    for book, sync in ((dune, "open_library"), (mort, "open_library"), (mort, "file")):
+        Sync.objects.create(book=book, sync_type=sync)
+    Sync.objects.create(book=mort, sync_type="open_library")
+
+    assert SyncRepository().counts() == {SyncType.OPEN_LIBRARY: 2, SyncType.FILE: 1}
 
 
 def test_a_second_decision_for_a_book_is_not_stored_and_the_first_stays():

@@ -1,16 +1,125 @@
 {% extends "erudite/base.html" %}
-{% load i18n %}
+{% load i18n static %}
 {% block content %}
   <h1>{% translate "Your library" %}</h1>
-  {% if book_count %}
-    <p>
-      {% blocktranslate count counter=book_count trimmed %}
+  <form class="search" method="get">
+    <label class="visually-hidden" for="search-q">{% translate "Search the library" %}</label>
+    <input id="search-q"
+           type="search"
+           name="q"
+           value="{{ books.query }}"
+           placeholder="{% translate "Title, author or series…" %}"
+           autocomplete="off">
+    <button type="submit">{% translate "Search" %}</button>
+    <div class="filters">
+      <fieldset>
+        <legend>{% translate "With" %}</legend>
+        {% for progress, label in syncs %}
+          <label>
+            <input type="checkbox"
+                   name="with"
+                   value="{{ progress.sync }}"{% if progress.sync in asked.done %} checked{% endif %}>
+            {{ label }} <span class="filters__count">{{ progress.done }}</span>
+          </label>
+        {% endfor %}
+      </fieldset>
+      <fieldset>
+        <legend>{% translate "Without" %}</legend>
+        {% for progress, label in syncs %}
+          <label>
+            <input type="checkbox"
+                   name="without"
+                   value="{{ progress.sync }}"{% if progress.sync in asked.todo %} checked{% endif %}>
+            {{ label }}
+          </label>
+        {% endfor %}
+      </fieldset>
+      <label class="visually-hidden" for="search-size">{% translate "Books per page" %}</label>
+      <select id="search-size" name="size">
+        {% for size in sizes %}
+          <option value="{{ size }}"{% if size == books.size %} selected{% endif %}>
+            {% blocktranslate trimmed %}
+              {{ size }} per page
+            {% endblocktranslate %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+  {% if books.books %}
+    <p class="count">
+      {% blocktranslate count counter=books.total trimmed %}
         {{ counter }} book.
       {% plural %}
         {{ counter }} books.
       {% endblocktranslate %}
     </p>
+    <form method="get" action="{% url 'open_library_queue' %}">
+      <table class="books">
+        <thead>
+          <tr>
+            <th class="books__pick" scope="col">
+              <label>
+                <input type="checkbox" id="select-all">
+                <span class="visually-hidden">{% translate "Select all books on this page" %}</span>
+              </label>
+            </th>
+            <th scope="col">{% translate "Book" %}</th>
+            <th class="books__series" scope="col">{% translate "Series" %}</th>
+            <th scope="col">{% translate "Reading status" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for book in books.books %}
+            <tr class="status--{{ book.status|slugify }}">
+              <td class="books__pick">
+                <label>
+                  <input type="checkbox" name="book" value="{{ book.book_id }}">
+                  <span class="visually-hidden">
+                    {% blocktranslate with title=book.title trimmed %}
+                      Select “{{ title }}”
+                    {% endblocktranslate %}
+                  </span>
+                </label>
+              </td>
+              <td>
+                <a class="books__title" href="{% url 'book' book.book_id %}">{{ book.title }}</a>
+                <span class="books__authors">{{ book.authors|join:", " }}</span>
+              </td>
+              <td class="books__series">
+                {{ book.series }}
+                {% if book.series_position %}#{{ book.series_position }}{% endif %}
+              </td>
+              <td class="books__status">{{ book.status }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="selection-bar">
+        <button class="button--primary" type="submit">
+          {% translate "Find the selected books on Open Library" %}
+        </button>
+      </div>
+    </form>
+    {% if books.pages > 1 %}
+      <nav class="pages" aria-label="{% translate "Pages" %}">
+        {% if books.page > 1 %}
+          <a href="{% querystring page=books.page|add:"-1" %}" rel="prev">{% translate "Previous" %}</a>
+        {% endif %}
+        <span>
+          {% blocktranslate with page=books.page pages=books.pages trimmed %}
+            Page {{ page }} of {{ pages }}
+          {% endblocktranslate %}
+        </span>
+        {% if books.page < books.pages %}
+          <a href="{% querystring page=books.page|add:"1" %}" rel="next">{% translate "Next" %}</a>
+        {% endif %}
+      </nav>
+    {% endif %}
+  {% elif books.query or asked.done or asked.todo %}
+    <p class="empty">{% translate "No book matches the search and the filters." %}</p>
   {% else %}
-    <p>{% translate "No books yet." %}</p>
+    <p class="empty">{% translate "No books yet." %}</p>
   {% endif %}
+  <script src="{% static 'erudite/select-all.js' %}" defer></script>
 {% endblock content %}

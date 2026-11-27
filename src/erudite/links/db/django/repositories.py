@@ -3,7 +3,9 @@
 from pathlib import Path
 from typing import override
 
+from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Count, Exists, OuterRef, Q
 from django.forms import fields_for_model
 
 from erudite.links.db.django.models import (
@@ -14,15 +16,21 @@ from erudite.links.db.django.models import (
     Decision,
     IgnoredExtension,
     RawBook,
+    Sync,
 )
 from erudite.pacts import (
+    BookDTO,
     BookFieldsData,
     BookRepositoryProtocol,
     BookSource,
+    BookSummaryDTO,
     DecisionRepositoryProtocol,
     IgnoredExtensionsProtocol,
     NotFoundError,
+    PickedWorkData,
     RawBookData,
+    SyncRepositoryProtocol,
+    SyncType,
 )
 
 # What a raw book gives to the book made for it.
@@ -45,10 +53,62 @@ def _credit(names: dict[int, list[str]]) -> None:
     )
 
 
+def _book(book_id: int) -> Book:
+    try:
+        return Book.objects.get(pk=book_id)
+    except Book.DoesNotExist as exc:
+        msg = f"The library has no book {book_id}."
+        raise NotFoundError(msg) from exc
+
+
+def _summary(book: Book) -> BookSummaryDTO:
+    return BookSummaryDTO(
+        book_id=book.pk,
+        title=book.title,
+        authors=tuple(str(credit) for credit in book.credits.all()),
+        series=book.series,
+        series_position=book.series_position,
+        status=str(book.get_status_display()),
+    )
+
+
 class BookRepository(BookRepositoryProtocol):
     @override
     def count(self) -> int:
         return Book.objects.count()
+
+    @override
+    def search(
+        self,
+        query: str,
+        *,
+        done: tuple[SyncType, ...] = (),
+        todo: tuple[SyncType, ...] = (),
+    ) -> list[BookSummaryDTO]:
+        books = Book.objects.prefetch_related("credits__author")
+        syncs = Sync.objects.filter(book=OuterRef("pk"))
+        for sync in done:
+            books = books.filter(Exists(syncs.filter(sync_type=sync)))
+        for sync in todo:
+            books = books.filter(~Exists(syncs.filter(sync_type=sync)))
+        if query:
+            # A book with two authors that match is still one book.
+            books = books.filter(
+                Q(title__icontains=query)
+                | Q(series__icontains=query)
+                | Q(authors__name__icontains=query)
+            ).distinct()
+        return [_summary(book) for book in books]
+
+    @override
+    def get(self, book_id: int) -> BookDTO:
+        book = _book(book_id)
+        return BookDTO(
+            summary=_summary(book),
+            description=book.description,
+            cover_url=book.cover.url if book.cover else "",
+            open_library_work=book.open_library_work,
+        )
 
     @override
     def keys(self, source: BookSource) -> set[str]:
@@ -76,6 +136,10 @@ class BookRepository(BookRepositoryProtocol):
                 RawBook(**raw | {"path": str(raw.get("path", ""))}, book=book)
                 for book, raw in zip(created, books, strict=True)
             )
+            Sync.objects.bulk_create(
+                Sync(book=book, sync_type=SyncType(raw["source"]))
+                for book, raw in zip(created, books, strict=True)
+            )
 
     @override
     def move_file(self, content_hash: str, path: Path) -> None:
@@ -85,11 +149,7 @@ class BookRepository(BookRepositoryProtocol):
 
     @override
     def fields(self, book_id: int) -> BookFieldsData:
-        try:
-            book = Book.objects.get(pk=book_id)
-        except Book.DoesNotExist as exc:
-            msg = f"The library has no book {book_id}."
-            raise NotFoundError(msg) from exc
+        book = _book(book_id)
         return BookFieldsData(
             title=book.title,
             authors=[str(c) for c in book.credits.select_related("author")],
@@ -110,6 +170,20 @@ class BookRepository(BookRepositoryProtocol):
                 _credit({book_id: values["authors"]})
 
     @override
+    def set_work(self, book_id: int, work: PickedWorkData) -> None:
+        with transaction.atomic():
+            book = _book(book_id)
+            book.open_library_work = work["work_id"]
+            book.description = work["description"] or book.description
+            if work["cover"] is not None:
+                # The storage never overwrites: without this the old image stays.
+                book.cover.delete(save=False)
+                book.cover.save(
+                    f"{book_id}.jpg", ContentFile(work["cover"]), save=False
+                )
+            book.save()
+
+    @override
     def fill_empty(self, book_id: int, values: BookFieldsData) -> bool:
         empty = Book.objects.filter(
             pk=book_id,
@@ -123,6 +197,19 @@ class BookRepository(BookRepositoryProtocol):
                 return False
             self.fill(book_id, values)
         return True
+
+
+class SyncRepository(SyncRepositoryProtocol):
+    @override
+    def counts(self) -> dict[SyncType, int]:
+        rows = Sync.objects.values("sync_type").annotate(
+            books=Count("book", distinct=True)
+        )
+        return {SyncType(row["sync_type"]): row["books"] for row in rows.order_by()}
+
+    @override
+    def record(self, book_id: int, sync: SyncType) -> None:
+        Sync.objects.create(book_id=book_id, sync_type=sync)
 
 
 class DecisionRepository(DecisionRepositoryProtocol):

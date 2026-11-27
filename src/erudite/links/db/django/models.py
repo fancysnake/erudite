@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from erudite.pacts import BookSource, ReadingStatus
+from erudite.pacts import BookSource, ReadingStatus, SyncType
 
 _STATUS_LABELS = {
     ReadingStatus.TO_READ: _("To read"),
@@ -18,6 +18,12 @@ _STATUS_LABELS = {
 _STATUS_CHOICES = [(status.value, _STATUS_LABELS[status]) for status in ReadingStatus]
 _SOURCE_LABELS = {BookSource.GOODREADS: _("Goodreads"), BookSource.FILE: _("File")}
 _SOURCE_CHOICES = [(source.value, _SOURCE_LABELS[source]) for source in BookSource]
+_SYNC_LABELS = {
+    SyncType.GOODREADS: _("Goodreads import"),
+    SyncType.FILE: _("File scan"),
+    SyncType.OPEN_LIBRARY: _("Open Library"),
+}
+_SYNC_CHOICES = [(sync.value, _SYNC_LABELS[sync]) for sync in SyncType]
 
 
 class Author(models.Model):
@@ -66,6 +72,12 @@ class Book(BookDetails):
         choices=_STATUS_CHOICES,
         default=ReadingStatus.TO_READ.value,
     )
+    description = models.TextField(_("description"), blank=True)
+    cover = models.FileField(_("cover"), upload_to="covers/", blank=True)
+    # The id Open Library has for the work, like OL45804W: all editions share it.
+    open_library_work = models.CharField(
+        _("Open Library work"), max_length=20, blank=True
+    )
 
     class Meta:
         ordering: ClassVar = ["title"]
@@ -101,6 +113,24 @@ class RawBook(BookDetails):
         ]
         verbose_name = _("raw book")
         verbose_name_plural = _("raw books")
+
+
+class Sync(models.Model):
+    """The sync log: one entry for each time a source gave values to a book."""
+
+    book = models.ForeignKey(
+        Book, on_delete=models.CASCADE, related_name="syncs", verbose_name=_("book")
+    )
+    sync_type = models.CharField(_("sync type"), max_length=20, choices=_SYNC_CHOICES)
+    time = models.DateTimeField(_("time"), auto_now_add=True)
+
+    class Meta:
+        ordering: ClassVar = ["-time"]
+        verbose_name = _("sync")
+        verbose_name_plural = _("syncs")
+
+    def __str__(self) -> str:
+        return f"{self.get_sync_type_display()}: {self.book}"
 
 
 class Decision(models.Model):

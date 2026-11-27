@@ -1,41 +1,98 @@
 """Business logic: services over the protocols in pacts."""
 
+import math
 from typing import TYPE_CHECKING, override
+from urllib.parse import urlsplit, urlunsplit
 
 from erudite.pacts import (
     BOOK_FIELDS,
+    PAGE_SIZES,
+    BookFieldsData,
     BookFilesServiceProtocol,
+    BookListDTO,
     BookSource,
+    CandidatesDTO,
     ClassificationServiceProtocol,
+    DownloadError,
     LibraryServiceProtocol,
+    NotFoundError,
+    OpenLibraryError,
+    PickedWorkData,
     ProposalOutcome,
     RawBookData,
+    SyncProgressDTO,
     SyncSummaryDTO,
+    SyncType,
+    VendorServiceProtocol,
+    WorkServiceProtocol,
 )
+from erudite.specs import WORK_ID
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from erudite.pacts import (
-        BookFieldsData,
+        BookDTO,
+        BookListQuery,
         BookRepositoryProtocol,
         DecisionRepositoryProtocol,
         DiskBookFilesProtocol,
         GoodreadsExportProtocol,
         IgnoredExtensionsProtocol,
+        OpenLibraryProtocol,
+        SyncRepositoryProtocol,
+        TransactionProtocol,
+        WebFilesProtocol,
+        WorkDTO,
     )
 
 
 class LibraryService(LibraryServiceProtocol):
     def __init__(
-        self, *, books: BookRepositoryProtocol, goodreads: GoodreadsExportProtocol
+        self,
+        *,
+        books: BookRepositoryProtocol,
+        syncs: SyncRepositoryProtocol,
+        goodreads: GoodreadsExportProtocol,
     ) -> None:
         self._books = books
+        self._syncs = syncs
         self._goodreads = goodreads
 
     @override
-    def book_count(self) -> int:
-        return self._books.count()
+    def books(self, asked: BookListQuery) -> BookListDTO:
+        page, size = asked["page"], asked["size"]
+        if size not in PAGE_SIZES:
+            msg = f"The book list has no pages of {size} books."
+            raise NotFoundError(msg)
+        query = asked["query"].strip()
+        # shortcut: every found book is loaded to cut one page, move the cut to
+        # the repository when the list gets slow.
+        found = self._books.search(query, done=asked["done"], todo=asked["todo"])
+        pages = max(math.ceil(len(found) / size), 1)
+        if not 1 <= page <= pages:
+            msg = f"The book list has no page {page}."
+            raise NotFoundError(msg)
+        return BookListDTO(
+            query=query,
+            size=size,
+            books=tuple(found[(page - 1) * size : page * size]),
+            total=len(found),
+            page=page,
+            pages=pages,
+        )
+
+    @override
+    def book(self, book_id: int) -> BookDTO:
+        return self._books.get(book_id)
+
+    @override
+    def sync_progress(self) -> tuple[SyncProgressDTO, ...]:
+        total, counts = self._books.count(), self._syncs.counts()
+        return tuple(
+            SyncProgressDTO(sync=sync, done=counts.get(sync, 0), total=total)
+            for sync in SyncType
+        )
 
     @override
     def import_goodreads(self, path: Path) -> SyncSummaryDTO:
@@ -124,3 +181,99 @@ class ClassificationService(ClassificationServiceProtocol):
         if self._decisions.create(book_id, new):
             return ProposalOutcome.WAITING
         return ProposalOutcome.ALREADY_WAITING
+
+
+def _first_visit(held: BookFieldsData) -> tuple[str, list[str]]:
+    """Return the query a page shows before the user types one, and its searches.
+
+    The searches are the ISBN, if the book holds one, then the query.
+    """
+    query = " ".join([held.get("title", ""), *held.get("authors", [])]).strip()
+    isbn = held.get("isbn13") or held.get("isbn10")
+    return query, [f"isbn:{isbn}", query] if isbn else [query]
+
+
+class WorkService(WorkServiceProtocol):
+    def __init__(
+        self,
+        *,
+        books: BookRepositoryProtocol,
+        syncs: SyncRepositoryProtocol,
+        open_library: OpenLibraryProtocol,
+        transaction: TransactionProtocol,
+    ) -> None:
+        self._books = books
+        self._syncs = syncs
+        self._open_library = open_library
+        self._transaction = transaction
+
+    @override
+    def candidates(
+        self, book_id: int, query: str | None = None, *, search: bool = True
+    ) -> CandidatesDTO:
+        held = self._books.fields(book_id)
+        # `None` is a first visit; a blank query is one the user sent.
+        if query is None:
+            query, searches = _first_visit(held)
+        else:
+            query = query.strip()
+            searches = [query]
+        # By work id: a work two searches find stays in its first place.
+        works: dict[str, WorkDTO] = {}
+        failure = ""
+        for text in [text for text in searches if text and search]:
+            try:
+                found = self._open_library.search(text)
+            except OpenLibraryError as exc:
+                failure = str(exc)
+                break
+            for work in found:
+                works.setdefault(work.work_id, work)
+        return CandidatesDTO(
+            book_id=book_id,
+            title=held.get("title", ""),
+            authors=tuple(held.get("authors", [])),
+            query=query,
+            works=tuple(works.values()),
+            failure=failure,
+        )
+
+    @override
+    def pick(self, book_id: int, work_id: str) -> None:
+        if not WORK_ID.fullmatch(work_id):
+            msg = f"{work_id!r} is not an Open Library work id."
+            raise NotFoundError(msg)
+        # Fails here for a book the library lacks, before any request is sent.
+        self._books.fields(book_id)
+        if not (found := self._open_library.search(f"key:/works/{work_id}")):
+            msg = f"Open Library has no work {work_id}."
+            raise NotFoundError(msg)
+        work = found[0]
+        cover = self._open_library.cover(work.cover.cover_id) if work.cover else None
+        picked = PickedWorkData(
+            work_id=work_id, description=work.description, cover=cover
+        )
+        # An empty title or no author changes nothing.
+        values = BookFieldsData()
+        if work.title:
+            values["title"] = work.title
+        if work.authors:
+            values["authors"] = list(work.authors)
+        with self._transaction.atomic():
+            self._books.set_work(book_id, picked)
+            self._books.fill(book_id, values)
+            self._syncs.record(book_id, SyncType.OPEN_LIBRARY)
+
+
+class VendorService(VendorServiceProtocol):
+    def __init__(self, *, web: WebFilesProtocol) -> None:
+        self._web = web
+
+    @override
+    def download(self, url: str) -> bytes:
+        address = urlsplit(url)
+        if address.scheme != "https":
+            msg = f"{url} is not an HTTPS address."
+            raise DownloadError(msg)
+        path = urlunsplit(("", "", address.path, address.query, ""))
+        return self._web.read(address.netloc, path)

@@ -10,6 +10,7 @@ from erudite.links.db.django.models import (
     Decision,
     IgnoredExtension,
     RawBook,
+    Sync,
 )
 from erudite.pacts import BookSource, ReadingStatus
 
@@ -348,3 +349,17 @@ def test_admin_adds_no_decision_by_hand(admin_client):
     response = admin_client.get("/admin/erudite_db/decision/add/")
 
     assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_admin_lists_the_sync_log_and_filters_it_by_type(admin_client):
+    Sync.objects.create(book=_book("Mort"), sync_type="open_library")
+    Sync.objects.create(book=_book("Dune"), sync_type="file")
+
+    response = admin_client.get(
+        "/admin/erudite_db/sync/", {"sync_type__exact": "open_library"}
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert [str(sync) for sync in response.context["cl"].result_list] == [
+        "Open Library: Mort"
+    ]

@@ -19,6 +19,7 @@ from erudite.links.db.django.models import (
     Decision,
     IgnoredExtension,
     RawBook,
+    Sync,
 )
 from erudite.links.db.django.repositories import BookRepository
 
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     RawBookAdminBase = admin.ModelAdmin[RawBook]
     IgnoredExtensionAdminBase = admin.ModelAdmin[IgnoredExtension]
     DecisionAdminBase = admin.ModelAdmin[Decision]
+    SyncAdminBase = admin.ModelAdmin[Sync]
     DecisionFormBase = forms.ModelForm[Decision]
     type Files = MultiValueDict[str, UploadedFile[bytes]]
     BookAuthorInlineBase = admin.TabularInline[BookAuthor, Book]
@@ -48,7 +50,7 @@ else:
     )
 
     AuthorAdminBase = BookAdminBase = RawBookAdminBase = ModelAdmin
-    IgnoredExtensionAdminBase = DecisionAdminBase = ModelAdmin
+    IgnoredExtensionAdminBase = DecisionAdminBase = SyncAdminBase = ModelAdmin
     DecisionFormBase = forms.ModelForm
     BookAuthorInlineBase = TabularInline
 
@@ -144,6 +146,13 @@ class RawBookAdmin(RawBookAdminBase):
     @override
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
+
+
+@admin.register(Sync)
+class SyncAdmin(SyncAdminBase):
+    list_display = ("book", "sync_type", "time")
+    list_filter = ("sync_type", "time")
+    search_fields = ("book__title",)
 
 
 @admin.register(IgnoredExtension)

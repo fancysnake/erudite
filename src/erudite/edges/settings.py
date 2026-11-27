@@ -13,6 +13,7 @@ env = environ.Env(
     DATABASE_URL=str,
     DEBUG=(bool, False),
     LANGUAGE_CODE=(str, "en"),
+    MEDIA_ROOT=(str, "media"),
     SECRET_KEY=str,
     STATIC_ROOT=(str, "staticfiles"),
     TIME_ZONE=(str, "Europe/Warsaw"),
@@ -99,7 +100,23 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = env("STATIC_ROOT")
-STATICFILES_DIRS = [BASE_DIR / "static"]
+# Files of other projects, downloaded by `mise run dj downloadvendor`. Outside
+# `src`, so the linters do not read them.
+VENDOR_STATIC_DIR = BASE_DIR.parent.parent / "vendor"
+# `sha384` is the base64 form an SRI attribute takes.
+VENDOR_DEPENDENCIES: list[dict[str, str]] = [
+    {
+        "name": "htmx",
+        "url": "https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js",
+        "filename": "htmx.min.js",
+        "sha384": "/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz",
+    }
+]
+STATICFILES_DIRS = [BASE_DIR / "static", ("vendor", VENDOR_STATIC_DIR)]
+
+# Cover images of books.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = env("MEDIA_ROOT")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

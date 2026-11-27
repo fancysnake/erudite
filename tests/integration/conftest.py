@@ -2,7 +2,11 @@ import csv
 
 import pytest
 
+from erudite import inits
+from erudite.links.web import https
+from erudite.links.web.open_library import OpenLibraryHttp
 from tests.goodreads import GOODREADS_COLUMNS
+from tests.open_library import FakeOpenLibrary
 
 
 @pytest.fixture(name="goodreads_export")
@@ -18,3 +22,18 @@ def goodreads_export_fixture(tmp_path):
         return path
 
     return write
+
+
+@pytest.fixture(name="media")
+def media_fixture(settings, tmp_path):
+    """Keep the cover images a test writes out of the working directory."""
+    settings.MEDIA_ROOT = tmp_path / "media"
+
+
+@pytest.fixture(name="open_library")
+def open_library_fixture(monkeypatch):
+    """Answer for Open Library, without the wait between two requests."""
+    fake = FakeOpenLibrary()
+    monkeypatch.setattr(https, "urlopen", fake)
+    monkeypatch.setattr(inits, "OPEN_LIBRARY", OpenLibraryHttp(interval=0))
+    return fake

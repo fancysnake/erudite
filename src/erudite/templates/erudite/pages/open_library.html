@@ -1,0 +1,37 @@
+{% extends "erudite/base.html" %}
+{% load i18n %}
+{% block title %}
+  {% translate "Find on Open Library" %}
+{% endblock title %}
+{% block content %}
+  <p class="actions">
+    <a href="{% url 'book' candidates.book_id %}">{% translate "Back to the book" %}</a>
+    {% if queue %}
+      <a href="{{ after }}">{% translate "Skip this book" %}</a>
+    {% endif %}
+  </p>
+  <h1>{% translate "Find on Open Library" %}</h1>
+  <p>
+    {% if candidates.authors %}
+      {% blocktranslate with title=candidates.title authors=candidates.authors|join:", " trimmed %}
+        The library holds this book as “{{ title }}” by {{ authors }}.
+      {% endblocktranslate %}
+    {% else %}
+      {% blocktranslate with title=candidates.title trimmed %}
+        The library holds this book as “{{ title }}”, with no author.
+      {% endblocktranslate %}
+    {% endif %}
+  </p>
+  <form class="search" method="get">
+    <label for="search-q">{% translate "Search for" %}</label>
+    <input id="search-q" type="search" name="q" value="{{ candidates.query }}">
+    {% for book in queue %}<input type="hidden" name="queue" value="{{ book }}">{% endfor %}
+    <button type="submit">{% translate "Search" %}</button>
+  </form>
+  <div id="works"
+       hx-get="{{ request.get_full_path }}"
+       hx-trigger="load"
+       aria-live="polite">
+    <p class="loading">{% translate "Searching Open Library…" %}</p>
+  </div>
+{% endblock content %}
