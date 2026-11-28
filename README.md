@@ -55,6 +55,27 @@ The import and the scan store what they found as a raw book, next to the book
 you see and edit. The admin lists raw books with their source and file path.
 They are read-only: your edits go to the book and the next run leaves it alone.
 
+## Set up the local model
+
+The features that read your files with a model use
+[Ollama](https://ollama.com/), which runs the model on your machine. The text
+of your files never leaves it. Install Ollama on the machine that holds the
+files:
+
+```sh
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+On Linux the installer starts Ollama as a service at `localhost:11434`. Check
+that it answers:
+
+```sh
+curl http://localhost:11434/api/version
+```
+
+Ollama uses a graphics card if the machine has one and the processor if not;
+on the processor each file takes longer.
+
 ## Work on it
 
 ```sh
