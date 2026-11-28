@@ -33,11 +33,11 @@ from erudite.pacts import (
     SyncType,
 )
 
-# What a raw book gives to the book made for it.
-_BOOK_FIELDS = set(fields_for_model(BookDetails))
-
 if TYPE_CHECKING:
     from collections.abc import Collection
+
+# What a raw book gives to the book made for it.
+_BOOK_FIELDS = set(fields_for_model(BookDetails))
 
 
 def _credit(names: dict[int, list[str]]) -> None:
@@ -230,7 +230,12 @@ class DecisionRepository(DecisionRepositoryProtocol):
     @override
     def drop_fields(self, book_id: int, names: Collection[str]) -> None:
         with transaction.atomic():
-            if (decision := Decision.objects.filter(book_id=book_id).first()) is None:
+            try:
+                # get() drops the default order, and so its join to the books.
+                decision = Decision.objects.get(book_id=book_id)
+            except Decision.DoesNotExist:
+                return
+            if decision.proposed.keys().isdisjoint(names):
                 return
             decision.proposed = {
                 name: value
