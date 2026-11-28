@@ -1,7 +1,7 @@
 """Repositories: the adapter's public surface, speaking DTOs and write dicts."""
 
 from pathlib import Path
-from typing import override
+from typing import TYPE_CHECKING, override
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -32,6 +32,9 @@ from erudite.pacts import (
     SyncRepositoryProtocol,
     SyncType,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Collection
 
 # What a raw book gives to the book made for it.
 _BOOK_FIELDS = set(fields_for_model(BookDetails))
@@ -223,6 +226,26 @@ class DecisionRepository(DecisionRepositoryProtocol):
             book_id=book_id, defaults={"proposed": proposed}
         )
         return created
+
+    @override
+    def drop_fields(self, book_id: int, names: Collection[str]) -> None:
+        with transaction.atomic():
+            try:
+                # get() drops the default order, and so its join to the books.
+                decision = Decision.objects.get(book_id=book_id)
+            except Decision.DoesNotExist:
+                return
+            if decision.proposed.keys().isdisjoint(names):
+                return
+            decision.proposed = {
+                name: value
+                for name, value in decision.proposed.items()
+                if name not in names
+            }
+            if decision.proposed:
+                decision.save()
+            else:
+                decision.delete()
 
 
 class IgnoredExtensions(IgnoredExtensionsProtocol):

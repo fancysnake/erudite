@@ -4,7 +4,7 @@ from urllib.error import URLError
 import pytest
 from django.contrib.messages import get_messages
 
-from erudite.links.db.django.models import Author, Book, Sync
+from erudite.links.db.django.models import Author, Book, Decision, Sync
 from erudite.pacts import CandidatesDTO
 from tests.open_library import BARE, BARE_WORK, COVER, FOX, FOX_ID, FOX_WORK
 
@@ -182,6 +182,18 @@ def test_a_pick_writes_the_work_to_the_book(staff, book, *, open_library):
     assert [(sync.book, sync.sync_type) for sync in Sync.objects.all()] == [
         (book, "open_library")
     ]
+
+
+def test_a_pick_leaves_a_waiting_decision_only_what_it_did_not_write(
+    staff, book, *, open_library
+):
+    open_library.searches = {f"key:/works/{FOX_ID}": [FOX]}
+    proposed = {"title": "mr_fox_final", "authors": ["R. D."], "series": "Fox"}
+    Decision.objects.create(book=book, proposed=proposed)
+
+    staff.post(_url(book), {"work": FOX_ID})
+
+    assert Decision.objects.get().proposed == {"series": "Fox"}
 
 
 @pytest.mark.parametrize(

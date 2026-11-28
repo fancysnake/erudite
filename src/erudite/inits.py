@@ -60,6 +60,7 @@ class Services(ServicesProtocol):
         return WorkService(
             books=BookRepository(),
             syncs=SyncRepository(),
+            decisions=DecisionRepository(),
             open_library=OPEN_LIBRARY,
             transaction=transaction,
         )
