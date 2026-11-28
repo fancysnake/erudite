@@ -471,3 +471,30 @@ def test_a_second_decision_for_a_book_is_not_stored_and_the_first_stays():
     assert not repository.create(book.pk, {"title": "Mort?"})
 
     assert Decision.objects.get().proposed == {"title": "Mort!"}
+
+
+def test_dropped_fields_leave_a_decision_and_the_rest_waits():
+    book = _mort()
+    proposed = {"title": "Mort!", "authors": ["T. Pratchett"], "series": "Discworld"}
+    Decision.objects.create(book=book, proposed=proposed)
+
+    DecisionRepository().drop_fields(book.pk, {"title", "authors"})
+
+    assert Decision.objects.get().proposed == {"series": "Discworld"}
+
+
+def test_a_decision_with_no_field_left_is_removed():
+    book = _mort()
+    Decision.objects.create(book=book, proposed={"title": "Mort!"})
+
+    DecisionRepository().drop_fields(book.pk, {"title", "authors"})
+
+    assert not Decision.objects.exists()
+
+
+def test_dropping_fields_of_a_book_without_a_decision_changes_nothing():
+    book = _mort()
+
+    DecisionRepository().drop_fields(book.pk, {"title"})
+
+    assert not Decision.objects.exists()

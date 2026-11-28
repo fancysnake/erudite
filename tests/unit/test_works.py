@@ -32,6 +32,7 @@ def _service(*, found=(), **held):
     service = WorkService(
         books=books,
         syncs=books.syncs,
+        decisions=books.decisions,
         open_library=open_library,
         transaction=MagicMock(),
     )
@@ -126,6 +127,14 @@ def test_a_pick_gives_the_book_what_the_work_holds():
     books.syncs.record.assert_called_once_with(BOOK, SyncType.OPEN_LIBRARY)
 
 
+def test_a_pick_drops_what_a_waiting_decision_proposes_for_the_values_it_wrote():
+    service, books, _open_library = _service(found=[[replace(FOX, authors=())]])
+
+    service.pick(BOOK, FOX.work_id)
+
+    books.decisions.drop_fields.assert_called_once_with(BOOK, {"title"})
+
+
 def test_a_pick_of_a_work_without_a_title_or_authors_fills_neither():
     service, books, _open_library = _service(
         found=[[replace(FILM, title="", authors=())]]
@@ -134,20 +143,24 @@ def test_a_pick_of_a_work_without_a_title_or_authors_fills_neither():
     service.pick(BOOK, FILM.work_id)
 
     books.fill.assert_called_once_with(BOOK, {})
+    books.decisions.drop_fields.assert_called_once_with(BOOK, set())
 
 
-def test_a_pick_makes_both_writes_in_one_transaction():
+def test_a_pick_makes_its_writes_in_one_transaction():
     books, open_library, transaction = MagicMock(), MagicMock(), MagicMock()
+    decisions = MagicMock()
     open_library.search.return_value = [FILM]
     writes = MagicMock()
     writes.attach_mock(transaction.atomic.return_value.__enter__, "begin")
     writes.attach_mock(books.set_work, "set_work")
     writes.attach_mock(books.fill, "fill")
+    writes.attach_mock(decisions.drop_fields, "drop_fields")
     writes.attach_mock(transaction.atomic.return_value.__exit__, "end")
 
     WorkService(
         books=books,
         syncs=MagicMock(),
+        decisions=decisions,
         open_library=open_library,
         transaction=transaction,
     ).pick(BOOK, FILM.work_id)
@@ -156,6 +169,7 @@ def test_a_pick_makes_both_writes_in_one_transaction():
         "begin",
         "set_work",
         "fill",
+        "drop_fields",
         "end",
     ]
 

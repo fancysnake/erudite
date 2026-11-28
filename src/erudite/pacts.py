@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, TypedDict
 
 if TYPE_CHECKING:
     import datetime as dt
+    from collections.abc import Collection
     from contextlib import AbstractContextManager
     from pathlib import Path
 
@@ -331,6 +332,12 @@ class DecisionRepositoryProtocol(Protocol):
         """Store `proposed` as the decision that waits for the book.
 
         False, and nothing stored, if a decision waits for the book already.
+        """
+
+    def drop_fields(self, book_id: int, names: Collection[str]) -> None:
+        """Take the named fields out of the decision that waits for the book.
+
+        A decision with no field left is removed. Nothing changes if none waits.
         """
 
 

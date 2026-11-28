@@ -199,11 +199,13 @@ class WorkService(WorkServiceProtocol):
         *,
         books: BookRepositoryProtocol,
         syncs: SyncRepositoryProtocol,
+        decisions: DecisionRepositoryProtocol,
         open_library: OpenLibraryProtocol,
         transaction: TransactionProtocol,
     ) -> None:
         self._books = books
         self._syncs = syncs
+        self._decisions = decisions
         self._open_library = open_library
         self._transaction = transaction
 
@@ -262,6 +264,8 @@ class WorkService(WorkServiceProtocol):
         with self._transaction.atomic():
             self._books.set_work(book_id, picked)
             self._books.fill(book_id, values)
+            # Accepting an older proposal for these values would undo the pick.
+            self._decisions.drop_fields(book_id, set(values))
             self._syncs.record(book_id, SyncType.OPEN_LIBRARY)
 
 
